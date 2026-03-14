@@ -1,6 +1,7 @@
 import { prisma } from '../lib/prisma'
 import { AppError, NotFoundError } from '../utils/errors'
 import { clubExists } from './clubs.service'
+import { isValidCurrencyFormat } from '../utils/currency'
 
 export async function listSaves() {
   const saves = await prisma.save.findMany({
@@ -27,7 +28,7 @@ export async function getSaveById(saveId: string) {
     },
   })
 
-  if (!save) throw new NotFoundError('Save not found')
+  if (!save) throw new NotFoundError('Save não encontrado.')
 
   const currentClubStint = save.clubStints.find((cs) => cs.isCurrent) ?? null
 
@@ -36,7 +37,11 @@ export async function getSaveById(saveId: string) {
 
 export async function createSave(data: { name: string; club: string; budget: string }) {
   if (!clubExists(data.club)) {
-    throw new AppError(`Club "${data.club}" not found in the clubs list`, 400)
+    throw new AppError(`Clube inválido: '${data.club}' não encontrado na lista de clubes disponíveis.`, 400)
+  }
+
+  if (!isValidCurrencyFormat(data.budget)) {
+    throw new AppError('Formato de orçamento inválido. Use o formato €XK ou €XM (ex: €85M).', 400)
   }
 
   const save = await prisma.$transaction(async (tx) => {
@@ -88,7 +93,11 @@ export async function updateSave(
     },
   })
 
-  if (!save) throw new NotFoundError('Save not found')
+  if (!save) throw new NotFoundError('Save não encontrado.')
+
+  if (data.budget && !isValidCurrencyFormat(data.budget)) {
+    throw new AppError('Formato de orçamento inválido. Use o formato €XK ou €XM (ex: €85M).', 400)
+  }
 
   const seasonChanged =
     data.currentSeason && data.currentSeason !== save.currentSeason
@@ -169,7 +178,7 @@ export async function updateSave(
 
 export async function deleteSave(saveId: string) {
   const save = await prisma.save.findUnique({ where: { id: saveId } })
-  if (!save) throw new NotFoundError('Save not found')
+  if (!save) throw new NotFoundError('Save não encontrado.')
 
   await prisma.save.delete({ where: { id: saveId } })
 }

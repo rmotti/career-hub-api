@@ -4,7 +4,7 @@ import { clubExists } from './clubs.service'
 
 export async function listClubStints(saveId: string) {
   const save = await prisma.save.findUnique({ where: { id: saveId } })
-  if (!save) throw new NotFoundError('Save not found')
+  if (!save) throw new NotFoundError('Save não encontrado.')
 
   return prisma.clubStint.findMany({
     where: { saveId },
@@ -14,24 +14,24 @@ export async function listClubStints(saveId: string) {
 
 export async function getCurrentClubStint(saveId: string) {
   const save = await prisma.save.findUnique({ where: { id: saveId } })
-  if (!save) throw new NotFoundError('Save not found')
+  if (!save) throw new NotFoundError('Save não encontrado.')
 
   const stint = await prisma.clubStint.findFirst({
     where: { saveId, isCurrent: true },
   })
 
-  if (!stint) throw new NotFoundError('No current club stint found')
+  if (!stint) throw new NotFoundError('Nenhum clube ativo encontrado para este save.')
 
   return stint
 }
 
 export async function createClubStint(saveId: string, data: { club: string }) {
   if (!clubExists(data.club)) {
-    throw new AppError(`Club "${data.club}" not found in the clubs list`, 400)
+    throw new AppError(`Clube inválido: '${data.club}' não encontrado na lista de clubes disponíveis.`, 400)
   }
 
   const save = await prisma.save.findUnique({ where: { id: saveId } })
-  if (!save) throw new NotFoundError('Save not found')
+  if (!save) throw new NotFoundError('Save não encontrado.')
 
   const currentStint = await prisma.clubStint.findFirst({
     where: { saveId, isCurrent: true },
@@ -84,10 +84,10 @@ export async function updateClubStint(
     where: { id: stintId, saveId },
   })
 
-  if (!stint) throw new NotFoundError('Club stint not found')
+  if (!stint) throw new NotFoundError('Passagem de clube não encontrada.')
 
   if (data.club && !clubExists(data.club)) {
-    throw new AppError(`Club "${data.club}" not found in the clubs list`, 400)
+    throw new AppError(`Clube inválido: '${data.club}' não encontrado na lista de clubes disponíveis.`, 400)
   }
 
   return prisma.clubStint.update({

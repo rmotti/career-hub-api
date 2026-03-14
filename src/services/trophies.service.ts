@@ -1,9 +1,9 @@
 import { prisma } from '../lib/prisma'
-import { NotFoundError } from '../utils/errors'
+import { AppError, NotFoundError } from '../utils/errors'
 
 export async function listTrophies(saveId: string) {
   const save = await prisma.save.findUnique({ where: { id: saveId } })
-  if (!save) throw new NotFoundError('Save not found')
+  if (!save) throw new NotFoundError('Save não encontrado.')
 
   const trophies = await prisma.trophy.findMany({
     where: { clubStint: { saveId } },
@@ -29,10 +29,10 @@ export async function createTrophy(
     where: { id: saveId },
     include: { clubStints: { where: { isCurrent: true } } },
   })
-  if (!save) throw new NotFoundError('Save not found')
+  if (!save) throw new NotFoundError('Save não encontrado.')
 
   const currentStint = save.clubStints[0]
-  if (!currentStint) throw new NotFoundError('No current club stint')
+  if (!currentStint) throw new AppError('Não é possível adicionar troféu: nenhum clube ativo encontrado.', 400)
 
   return prisma.trophy.create({
     data: {
@@ -46,7 +46,7 @@ export async function deleteTrophy(saveId: string, id: string) {
   const trophy = await prisma.trophy.findFirst({
     where: { id, clubStint: { saveId } },
   })
-  if (!trophy) throw new NotFoundError('Trophy not found')
+  if (!trophy) throw new NotFoundError('Troféu não encontrado.')
 
   await prisma.trophy.delete({ where: { id } })
 }

@@ -1,11 +1,13 @@
 import { prisma } from '../lib/prisma'
-import { NotFoundError } from '../utils/errors'
-import { parseCurrency, formatCurrency } from '../utils/currency'
+import { AppError, NotFoundError } from '../utils/errors'
+import { parseCurrency, formatCurrency, isValidCurrencyFormat } from '../utils/currency'
 import { TransferType, Position, PlayerStatus } from '@prisma/client'
+
+const SEASON_PATTERN = /^\d{4}\/\d{2}$/
 
 export async function listTransfers(saveId: string, seasonFilter?: string) {
   const save = await prisma.save.findUnique({ where: { id: saveId } })
-  if (!save) throw new NotFoundError('Save not found')
+  if (!save) throw new NotFoundError('Save não encontrado.')
 
   const where: { saveId: string; season?: string } = { saveId }
   if (seasonFilter === 'current') {
@@ -31,13 +33,38 @@ export async function createTransfer(
     playerId?: string
   }
 ) {
+  if (!data.from || !data.to) {
+    throw new AppError("Os campos 'from' e 'to' são obrigatórios.", 400)
+  }
+
+  if (!SEASON_PATTERN.test(data.season)) {
+    throw new AppError('Formato de temporada inválido. Use o formato YYYY/YY (ex: 2028/29).', 400)
+  }
+
+  if (data.fee && data.fee !== '€0' && !isValidCurrencyFormat(data.fee)) {
+    throw new AppError('Formato de valor de transferência inválido. Use o formato €XK ou €XM (ex: €45M).', 400)
+  }
+
   const save = await prisma.save.findUnique({
     where: { id: saveId },
     include: { clubStints: { where: { isCurrent: true } } },
   })
-  if (!save) throw new NotFoundError('Save not found')
+  if (!save) throw new NotFoundError('Save não encontrado.')
 
   const currentStint = save.clubStints[0]
+
+  if (data.playerId) {
+    const player = await prisma.player.findFirst({ where: { id: data.playerId, saveId } })
+    if (!player) throw new AppError('Jogador não encontrado neste save. Verifique o ID informado.', 404)
+
+    if (data.type === TransferType.venda && !player.activeClubStintId) {
+      throw new AppError(`Não é possível registrar venda: o jogador '${player.name}' não está no elenco ativo.`, 400)
+    }
+
+    if (data.type === TransferType.compra && player.activeClubStintId) {
+      throw new AppError(`O jogador '${player.name}' já está no elenco ativo desta temporada.`, 400)
+    }
+  }
 
   const transfer = await prisma.$transaction(async (tx) => {
     const newTransfer = await tx.transfer.create({
@@ -135,14 +162,22 @@ export async function updateTransfer(
   }
 ) {
   const transfer = await prisma.transfer.findFirst({ where: { id: tid, saveId } })
-  if (!transfer) throw new NotFoundError('Transfer not found')
+  if (!transfer) throw new NotFoundError('Transferência não encontrada.')
+
+  if (data.season && !SEASON_PATTERN.test(data.season)) {
+    throw new AppError('Formato de temporada inválido. Use o formato YYYY/YY (ex: 2028/29).', 400)
+  }
+
+  if (data.fee && data.fee !== '€0' && !isValidCurrencyFormat(data.fee)) {
+    throw new AppError('Formato de valor de transferência inválido. Use o formato €XK ou €XM (ex: €45M).', 400)
+  }
 
   return prisma.transfer.update({ where: { id: tid }, data })
 }
 
 export async function deleteTransfer(saveId: string, tid: string) {
   const transfer = await prisma.transfer.findFirst({ where: { id: tid, saveId } })
-  if (!transfer) throw new NotFoundError('Transfer not found')
+  if (!transfer) throw new NotFoundError('Transferência não encontrada.')
 
   await prisma.transfer.delete({ where: { id: tid } })
 }

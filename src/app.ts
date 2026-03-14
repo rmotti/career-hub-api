@@ -2,6 +2,7 @@ import Fastify from 'fastify'
 import cors from '@fastify/cors'
 import swagger from '@fastify/swagger'
 import swaggerUi from '@fastify/swagger-ui'
+import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library'
 import { AppError } from './utils/errors'
 import { clubsRoutes } from './routes/clubs.routes'
 import { savesRoutes } from './routes/saves.routes'
@@ -61,12 +62,30 @@ app.register(teamStatsRoutes, { prefix: '/api' })
 app.register(transfersRoutes, { prefix: '/api' })
 app.register(trophiesRoutes, { prefix: '/api' })
 
+app.setSchemaErrorFormatter((errors, _dataVar) => {
+  const first = errors[0]
+  const field = first.instancePath.replace('/', '') || (first.params as Record<string, string>)?.missingProperty
+  return new Error(`Campo inválido: '${field}' — ${first.message}`)
+})
+
 app.setErrorHandler((error, _request, reply) => {
   if (error instanceof AppError) {
     return reply.status(error.statusCode).send({
       error: error.message,
       statusCode: error.statusCode,
     })
+  }
+
+  if (error instanceof PrismaClientKnownRequestError) {
+    if (error.code === 'P2025') {
+      return reply.status(404).send({ error: 'Registro não encontrado.', statusCode: 404 })
+    }
+    if (error.code === 'P2003') {
+      return reply.status(400).send({ error: 'Referência inválida: um dos IDs fornecidos não existe.', statusCode: 400 })
+    }
+    if (error.code === 'P2002') {
+      return reply.status(409).send({ error: 'Conflito: registro duplicado.', statusCode: 409 })
+    }
   }
 
   if (error.validation) {
@@ -78,7 +97,7 @@ app.setErrorHandler((error, _request, reply) => {
 
   app.log.error(error)
   return reply.status(500).send({
-    error: 'Internal Server Error',
+    error: 'Erro interno do servidor.',
     statusCode: 500,
   })
 })

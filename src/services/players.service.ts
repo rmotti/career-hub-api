@@ -3,11 +3,14 @@ import { AppError, NotFoundError } from '../utils/errors'
 import { isValidCurrencyFormat, formatCurrency } from '../utils/currency'
 import { Position, PlayerStatus } from '@prisma/client'
 
-function normalizeCurrency(value: string | number | undefined, fieldName: string): string | undefined {
+function normalizeCurrency(value: string | number | undefined, fieldName: 'salary' | 'marketValue'): string | undefined {
   if (value === undefined) return undefined
   if (typeof value === 'number') return formatCurrency(value)
   if (!isValidCurrencyFormat(value)) {
-    throw new AppError(`Invalid format for ${fieldName}. Use format like "€750K" or "€1.5M"`, 400)
+    if (fieldName === 'salary') {
+      throw new AppError('Formato de salário inválido. Use o formato €XK ou €XM (ex: €75K).', 400)
+    }
+    throw new AppError('Formato de valor de mercado inválido. Use o formato €XK ou €XM (ex: €35M).', 400)
   }
   return value
 }
@@ -17,7 +20,7 @@ export async function listPlayers(saveId: string, activeOnly?: boolean) {
     where: { id: saveId },
     include: { clubStints: { where: { isCurrent: true } } },
   })
-  if (!save) throw new NotFoundError('Save not found')
+  if (!save) throw new NotFoundError('Save não encontrado.')
 
   if (activeOnly) {
     const currentStint = save.clubStints[0]
@@ -63,7 +66,10 @@ export async function listPlayers(saveId: string, activeOnly?: boolean) {
 
 export async function getPlayerById(saveId: string, playerId: string) {
   const save = await prisma.save.findUnique({ where: { id: saveId } })
-  if (!save) throw new NotFoundError('Save not found')
+  if (!save) throw new NotFoundError('Save não encontrado.')
+
+  const playerExists = await prisma.player.findUnique({ where: { id: playerId } })
+  if (!playerExists) throw new NotFoundError('Jogador não encontrado.')
 
   const player = await prisma.player.findFirst({
     where: { id: playerId, saveId },
@@ -74,7 +80,7 @@ export async function getPlayerById(saveId: string, playerId: string) {
     },
   })
 
-  if (!player) throw new NotFoundError('Player not found')
+  if (!player) throw new NotFoundError('Jogador não encontrado neste save.')
 
   const totalStats = player.seasonStats.reduce(
     (acc, s) => ({
@@ -115,7 +121,7 @@ export async function createPlayer(
     where: { id: saveId },
     include: { clubStints: { where: { isCurrent: true } } },
   })
-  if (!save) throw new NotFoundError('Save not found')
+  if (!save) throw new NotFoundError('Save não encontrado.')
 
   const currentStint = save.clubStints[0]
 
@@ -165,7 +171,7 @@ export async function updatePlayer(
   }
 ) {
   const player = await prisma.player.findFirst({ where: { id: playerId, saveId } })
-  if (!player) throw new NotFoundError('Player not found')
+  if (!player) throw new NotFoundError('Jogador não encontrado neste save.')
 
   const normalizedData = {
     ...data,
@@ -190,13 +196,17 @@ export async function updatePlayerStats(
     where: { id: saveId },
     include: { clubStints: { where: { isCurrent: true } } },
   })
-  if (!save) throw new NotFoundError('Save not found')
+  if (!save) throw new NotFoundError('Save não encontrado.')
 
   const player = await prisma.player.findFirst({ where: { id: playerId, saveId } })
-  if (!player) throw new NotFoundError('Player not found')
+  if (!player) throw new NotFoundError('Jogador não encontrado neste save.')
 
   const currentStint = save.clubStints[0]
-  if (!currentStint) throw new NotFoundError('No current club stint')
+  if (!currentStint) throw new NotFoundError('Nenhum clube ativo encontrado para este save.')
+
+  if (player.activeClubStintId !== currentStint.id) {
+    throw new AppError(`O jogador '${player.name}' não está no elenco ativo desta temporada.`, 400)
+  }
 
   const stats = await prisma.playerSeasonStats.findFirst({
     where: {
@@ -206,7 +216,7 @@ export async function updatePlayerStats(
     },
   })
 
-  if (!stats) throw new NotFoundError('Player season stats not found for current season')
+  if (!stats) throw new NotFoundError('Estatísticas do jogador para a temporada atual não encontradas.')
 
   return prisma.playerSeasonStats.update({
     where: { id: stats.id },
@@ -216,7 +226,7 @@ export async function updatePlayerStats(
 
 export async function releasePlayer(saveId: string, playerId: string) {
   const player = await prisma.player.findFirst({ where: { id: playerId, saveId } })
-  if (!player) throw new NotFoundError('Player not found')
+  if (!player) throw new NotFoundError('Jogador não encontrado neste save.')
 
   return prisma.player.update({
     where: { id: playerId },
