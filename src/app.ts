@@ -49,6 +49,10 @@ app.register(swaggerUi, {
   },
 })
 
+app.get('/', (_request, reply) => {
+  reply.redirect('/docs')
+})
+
 app.register(clubsRoutes, { prefix: '/api' })
 app.register(savesRoutes, { prefix: '/api' })
 app.register(clubStintsRoutes, { prefix: '/api' })

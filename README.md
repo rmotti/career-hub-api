@@ -23,11 +23,13 @@ Backend REST para tracking de Career Mode do FC 26. Registre sua carreira com de
 - **Múltiplos saves** — gerencie carreiras diferentes em paralelo
 - **Histórico de clubes** — registre cada passagem com anos de início e fim
 - **Elenco ativo** — controle quais jogadores estão no clube atual
-- **Stats por temporada** — tanto individuais (gols, assistências, cartões) quanto da equipe (vitórias, posse, gols pro/contra)
-- **Avanço de temporada automático** — ao atualizar `currentSeason`, a API cria automaticamente os registros de stats vazios para todos os jogadores ativos e para a equipe
-- **Transferências** — compras reativam/criam jogadores no elenco; vendas os desvínculam
-- **Troféus** — vinculados ao clube em que foram conquistados
-- **Validações** — JSON Schema integrado ao Fastify (idade, OVR, posse, enums de posição/status)
+- **Stats por temporada** — tanto individuais (gols, assistências, cartões) quanto da equipe (vitórias, posse, gols pro/contra, posição na liga, resultado nas copas)
+- **Orçamento e saldo** — `budget` fixo por temporada; `balance` atualizado automaticamente a cada compra ou venda
+- **Avanço de temporada automático** — ao atualizar `currentSeason`, a API cria registros de stats vazios para todos os jogadores ativos e para a equipe
+- **Troféus automáticos** — ao avançar de temporada, troféus são criados automaticamente se `leaguePosition === 1`, `europeanCupResult === "Campeao"` ou `nationalCupResult === "Campeao"`
+- **Transferências** — compras reativam/criam jogadores no elenco e debitam o `balance`; vendas desvinculam e creditam o `balance`
+- **Formato de moeda normalizado** — `salary` e `marketValue` seguem o padrão `€750K` / `€1.5M`
+- **Validações** — JSON Schema integrado ao Fastify (idade, OVR, posse, enums de posição/status/cupResult, padrão de moeda)
 - **Swagger UI** — documentação interativa em `/docs`
 
 ---
@@ -47,6 +49,7 @@ Save ──< ClubStint ──< TeamSeasonStats
 - Apenas um `ClubStint` tem `isCurrent: true` por vez
 - `PlayerSeasonStats` conecta um jogador a um stint e a uma temporada específica
 - `Transfer` pode ou não referenciar um `Player` existente
+- `budget` é o orçamento original da temporada e nunca muda; `balance` flutua conforme as transferências
 
 ---
 
@@ -113,6 +116,22 @@ A documentação Swagger em `http://localhost:3333/docs`.
 
 ---
 
+## Formato de moeda
+
+Todos os campos monetários (`salary`, `marketValue`, `budget`, `balance`, `fee`) seguem o padrão:
+
+| Valor | Formato |
+|---|---|
+| Abaixo de 1.000.000 | `€750K`, `€100K` |
+| A partir de 1.000.000 | `€1.5M`, `€35M`, `€100M` |
+
+- Prefixo `€` obrigatório
+- Sufixo `K` (milhares) ou `M` (milhões) obrigatório, maiúsculo
+- Exemplos válidos: `€750K`, `€1.5M`, `€85M`, `€100K`
+- Exemplos inválidos: `750000`, `35M`, `€35m`, `£80M`
+
+---
+
 ## Endpoints
 
 ### Clubs
@@ -137,19 +156,27 @@ A documentação Swagger em `http://localhost:3333/docs`.
 ```json
 {
   "name": "Minha Carreira",
-  "club": "Liverpool"
+  "club": "Liverpool",
+  "budget": "€100M"
 }
 ```
+
+> `budget` é obrigatório. O `balance` inicial é automaticamente igual ao `budget`.
 
 **PATCH `/api/saves/:saveId` — body:**
 ```json
 {
   "currentYear": 2027,
   "currentSeason": "2027/28",
-  "budget": "£80M",
-  "balance": "£12M"
+  "budget": "€80M",
+  "balance": "€12M"
 }
 ```
+
+> Ao alterar `currentSeason`, a API:
+> 1. Verifica os `TeamSeasonStats` da temporada que está encerrando
+> 2. Cria troféus automaticamente conforme os resultados (ver [Troféus automáticos](#troféus-automáticos))
+> 3. Cria `TeamSeasonStats` e `PlayerSeasonStats` vazios para a nova temporada
 
 ---
 
@@ -190,10 +217,12 @@ A documentação Swagger em `http://localhost:3333/docs`.
   "age": 26,
   "status": "Crucial",
   "ovr": 91,
-  "salary": "£250,000/w",
-  "marketValue": "£120M"
+  "salary": "€750K",
+  "marketValue": "€85M"
 }
 ```
+
+> `salary` e `marketValue` são opcionais mas devem seguir o [formato de moeda](#formato-de-moeda) quando informados.
 
 **Resposta de GET `/:playerId`:**
 ```json
@@ -233,11 +262,28 @@ A documentação Swagger em `http://localhost:3333/docs`.
   "possession": 57,
   "wins": 24,
   "draws": 5,
-  "losses": 9
+  "losses": 9,
+  "leaguePosition": 1,
+  "europeanCupResult": "Campeao",
+  "nationalCupResult": "Semifinal"
 }
 ```
 
-> `possession` deve estar entre 0 e 100.
+> - `possession` deve estar entre 0 e 100
+> - `leaguePosition` é inteiro, mínimo 1
+> - Ao avançar de temporada, `leaguePosition === 1` ou resultados `"Campeao"` nas copas geram troféus automaticamente
+
+**Enum `CupResult`:**
+
+| Valor | Significado |
+|---|---|
+| `Campeao` | Campeão da competição |
+| `Final` | Vice-campeão |
+| `Semifinal` | Eliminado nas semifinais |
+| `Quartas` | Eliminado nas quartas |
+| `OitavasOuFaseDeGrupos` | Eliminado nas oitavas ou fase de grupos |
+| `Eliminado` | Eliminado em fase não especificada |
+| `NaoParticipou` | Não participou (padrão) |
 
 ---
 
@@ -258,7 +304,7 @@ A documentação Swagger em `http://localhost:3333/docs`.
   "type": "compra",
   "from": "Real Madrid",
   "to": "Liverpool",
-  "fee": "£80M",
+  "fee": "€80M",
   "season": "2027/28",
   "playerId": "uuid-opcional"
 }
@@ -273,7 +319,9 @@ A documentação Swagger em `http://localhost:3333/docs`.
 | `venda` | Sim | Seta `activeClubStintId: null` no player |
 | `venda` | Não | Apenas registra a transferência |
 
-> O formato de `season` deve ser `YYYY/YY` (ex: `2027/28`).
+> - O `balance` do save é atualizado automaticamente: **compra** debita o `fee`; **venda** credita o `fee`. Se `fee` for nulo ou `€0`, o `balance` não é alterado.
+> - O formato de `season` deve ser `YYYY/YY` (ex: `2027/28`).
+> - `fee` deve seguir o [formato de moeda](#formato-de-moeda).
 
 ---
 
@@ -293,6 +341,32 @@ A documentação Swagger em `http://localhost:3333/docs`.
 }
 ```
 
+**Resposta de GET:**
+```json
+[
+  {
+    "id": "uuid",
+    "name": "Manchester City — Campeão da Liga 2026/27",
+    "year": 2027,
+    "club": "Manchester City"
+  }
+]
+```
+
+---
+
+### Troféus automáticos
+
+Ao chamar `PATCH /api/saves/:saveId` com uma `currentSeason` diferente, a API verifica o `TeamSeasonStats` da temporada que está encerrando e cria troféus automaticamente:
+
+| Condição | Troféu gerado |
+|---|---|
+| `leaguePosition === 1` | `"<Clube> — Campeão da Liga <temporada>"` |
+| `europeanCupResult === "Campeao"` | `"<Clube> — Campeão Europeu <temporada>"` |
+| `nationalCupResult === "Campeao"` | `"<Clube> — Campeão da Copa Nacional <temporada>"` |
+
+Toda a criação de troféus + stats da nova temporada ocorre em uma única transação Prisma.
+
 ---
 
 ## Tratamento de erros
@@ -308,7 +382,7 @@ Todos os erros retornam no formato:
 
 | Status | Situação |
 |---|---|
-| 400 | Validação de schema falhou ou regra de negócio violada |
+| 400 | Validação de schema falhou, formato de moeda inválido ou regra de negócio violada |
 | 404 | Recurso não encontrado |
 | 500 | Erro interno inesperado |
 
@@ -318,18 +392,17 @@ Todos os erros retornam no formato:
 
 **Iniciar uma carreira:**
 1. `GET /api/clubs` — escolha um clube
-2. `POST /api/saves` — crie o save com nome e clube
+2. `POST /api/saves` — crie o save com nome, clube e `budget` inicial
 3. `POST /api/saves/:saveId/players` — adicione jogadores ao elenco
 
-**Fechar uma temporada:**
-1. `PATCH /api/saves/:saveId/team-stats/:statsId` — atualize os stats finais
-2. `PATCH /api/saves/:saveId/players/:playerId/stats` — atualize stats individuais
-3. `POST /api/saves/:saveId/trophies` — registre troféus conquistados
-4. `PATCH /api/saves/:saveId` — avance a `currentSeason` (cria automaticamente novos registros de stats)
-
 **Janela de transferências:**
-1. `POST /api/saves/:saveId/transfers` com `type: "venda"` — venda jogadores
-2. `POST /api/saves/:saveId/transfers` com `type: "compra"` — contrate jogadores
+1. `POST /api/saves/:saveId/transfers` com `type: "venda"` — venda jogadores (credita `balance`)
+2. `POST /api/saves/:saveId/transfers` com `type: "compra"` — contrate jogadores (debita `balance`)
+
+**Fechar uma temporada:**
+1. `PATCH /api/saves/:saveId/team-stats/:statsId` — atualize stats finais incluindo `leaguePosition`, `europeanCupResult` e `nationalCupResult`
+2. `PATCH /api/saves/:saveId/players/:playerId/stats` — atualize stats individuais
+3. `PATCH /api/saves/:saveId` — avance a `currentSeason` (cria troféus automáticos + novos registros de stats)
 
 **Mudar de clube:**
 1. `POST /api/saves/:saveId/club-stints` — registra a mudança, fecha o stint anterior e desvincula todo o elenco
@@ -348,7 +421,8 @@ Todos os erros retornam no formato:
 │   ├── lib/
 │   │   └── prisma.ts       # Singleton do PrismaClient
 │   ├── utils/
-│   │   └── errors.ts       # AppError / NotFoundError
+│   │   ├── errors.ts       # AppError / NotFoundError
+│   │   └── currency.ts     # formatCurrency / parseCurrency / isValidCurrencyFormat
 │   ├── routes/             # Definição de rotas + schemas Swagger
 │   ├── controllers/        # Handlers HTTP (request → service → reply)
 │   └── services/           # Regras de negócio + queries Prisma
