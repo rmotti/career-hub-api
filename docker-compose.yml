@@ -1,0 +1,15 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: fc26_db
+    environment:
+      POSTGRES_USER: fc26
+      POSTGRES_PASSWORD: fc26
+      POSTGRES_DB: fc26_career_hub
+    ports:
+      - "5432:5432"
+    volumes:
+      - fc26_data:/var/lib/postgresql/data
+
+volumes:
+  fc26_data:

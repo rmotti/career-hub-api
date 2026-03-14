@@ -1,0 +1,131 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Save {
+  id             String      @id @default(uuid())
+  name           String
+  currentYear    Int         @default(2026)
+  currentSeason  String      @default("2026/27")
+  budget         String?
+  balance        String?
+  clubStints     ClubStint[]
+  players        Player[]
+  transfers      Transfer[]
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+}
+
+model ClubStint {
+  id               String             @id @default(uuid())
+  saveId           String
+  save             Save               @relation(fields: [saveId], references: [id], onDelete: Cascade)
+  club             String
+  startYear        String
+  endYear          String?
+  isCurrent        Boolean            @default(true)
+  playerSeasonStats PlayerSeasonStats[]
+  teamSeasonStats  TeamSeasonStats[]
+  trophies         Trophy[]
+  players          Player[]           @relation("ActiveClubStint")
+  createdAt        DateTime           @default(now())
+}
+
+model Player {
+  id                String             @id @default(uuid())
+  saveId            String
+  save              Save               @relation(fields: [saveId], references: [id], onDelete: Cascade)
+  activeClubStintId String?
+  activeClubStint   ClubStint?         @relation("ActiveClubStint", fields: [activeClubStintId], references: [id])
+  name              String
+  position          Position
+  age               Int
+  status            PlayerStatus
+  ovr               Int
+  salary            String?
+  marketValue       String?
+  seasonStats       PlayerSeasonStats[]
+  transfers         Transfer[]
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+}
+
+model PlayerSeasonStats {
+  id           String    @id @default(uuid())
+  playerId     String
+  player       Player    @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  clubStintId  String
+  clubStint    ClubStint @relation(fields: [clubStintId], references: [id], onDelete: Cascade)
+  season       String
+  goals        Int       @default(0)
+  assists      Int       @default(0)
+  yellowCards  Int       @default(0)
+  redCards     Int       @default(0)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+model TeamSeasonStats {
+  id            String    @id @default(uuid())
+  clubStintId   String
+  clubStint     ClubStint @relation(fields: [clubStintId], references: [id], onDelete: Cascade)
+  season        String
+  goalsPro      Int       @default(0)
+  goalsAgainst  Int       @default(0)
+  possession    Int       @default(0)
+  wins          Int       @default(0)
+  draws         Int       @default(0)
+  losses        Int       @default(0)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model Transfer {
+  id          String       @id @default(uuid())
+  saveId      String
+  save        Save         @relation(fields: [saveId], references: [id], onDelete: Cascade)
+  playerId    String?
+  player      Player?      @relation(fields: [playerId], references: [id])
+  playerName  String
+  type        TransferType
+  from        String
+  to          String
+  fee         String?
+  season      String
+  createdAt   DateTime     @default(now())
+}
+
+model Trophy {
+  id           String    @id @default(uuid())
+  clubStintId  String
+  clubStint    ClubStint @relation(fields: [clubStintId], references: [id], onDelete: Cascade)
+  name         String
+  year         Int
+  createdAt    DateTime  @default(now())
+}
+
+enum Position {
+  GOL
+  ZAG
+  MEI
+  ATA
+}
+
+enum PlayerStatus {
+  Crucial
+  Important
+  Role
+  Sporadic
+  Promising
+}
+
+enum TransferType {
+  compra
+  venda
+}
