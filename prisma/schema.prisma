@@ -72,18 +72,21 @@ model PlayerSeasonStats {
 }
 
 model TeamSeasonStats {
-  id            String    @id @default(uuid())
-  clubStintId   String
-  clubStint     ClubStint @relation(fields: [clubStintId], references: [id], onDelete: Cascade)
-  season        String
-  goalsPro      Int       @default(0)
-  goalsAgainst  Int       @default(0)
-  possession    Int       @default(0)
-  wins          Int       @default(0)
-  draws         Int       @default(0)
-  losses        Int       @default(0)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id                  String     @id @default(uuid())
+  clubStintId         String
+  clubStint           ClubStint  @relation(fields: [clubStintId], references: [id], onDelete: Cascade)
+  season              String
+  goalsPro            Int        @default(0)
+  goalsAgainst        Int        @default(0)
+  possession          Int        @default(0)
+  wins                Int        @default(0)
+  draws               Int        @default(0)
+  losses              Int        @default(0)
+  leaguePosition      Int?
+  europeanCupResult   CupResult  @default(NaoParticipou)
+  nationalCupResult   CupResult  @default(NaoParticipou)
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
 }
 
 model Transfer {
@@ -128,4 +131,14 @@ enum PlayerStatus {
 enum TransferType {
   compra
   venda
+}
+
+enum CupResult {
+  Campeao
+  Final
+  Semifinal
+  Quartas
+  OitavasOuFaseDeGrupos
+  Eliminado
+  NaoParticipou
 }

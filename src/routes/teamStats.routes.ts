@@ -1,6 +1,8 @@
 import { FastifyInstance } from 'fastify'
 import * as teamStatsController from '../controllers/teamStats.controller'
 
+const CUP_RESULT_VALUES = ['Campeao', 'Final', 'Semifinal', 'Quartas', 'OitavasOuFaseDeGrupos', 'Eliminado', 'NaoParticipou'] as const
+
 export async function teamStatsRoutes(app: FastifyInstance) {
   app.get<{
     Params: { saveId: string }
@@ -34,6 +36,9 @@ export async function teamStatsRoutes(app: FastifyInstance) {
       wins?: number
       draws?: number
       losses?: number
+      leaguePosition?: number
+      europeanCupResult?: typeof CUP_RESULT_VALUES[number]
+      nationalCupResult?: typeof CUP_RESULT_VALUES[number]
     }
   }>(
     '/saves/:saveId/team-stats/:statsId',
@@ -58,6 +63,9 @@ export async function teamStatsRoutes(app: FastifyInstance) {
             wins: { type: 'integer', minimum: 0, example: 24 },
             draws: { type: 'integer', minimum: 0, example: 5 },
             losses: { type: 'integer', minimum: 0, example: 9 },
+            leaguePosition: { type: 'integer', minimum: 1, example: 1 },
+            europeanCupResult: { type: 'string', enum: [...CUP_RESULT_VALUES], example: 'Campeao' },
+            nationalCupResult: { type: 'string', enum: [...CUP_RESULT_VALUES], example: 'Semifinal' },
           },
         },
       },

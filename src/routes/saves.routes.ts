@@ -23,19 +23,20 @@ export async function savesRoutes(app: FastifyInstance) {
     },
   }, savesController.getSave)
 
-  app.post<{ Body: { name: string; club: string } }>(
+  app.post<{ Body: { name: string; club: string; budget: string } }>(
     '/saves',
     {
       schema: {
         tags: ['Saves'],
         summary: 'Criar novo save',
-        description: 'Cria um save, um ClubStint inicial e TeamSeasonStats para a temporada 2026/27.',
+        description: 'Cria um save, um ClubStint inicial e TeamSeasonStats para a temporada 2026/27. O `balance` é inicializado igual ao `budget`.',
         body: {
           type: 'object',
-          required: ['name', 'club'],
+          required: ['name', 'club', 'budget'],
           properties: {
             name: { type: 'string', minLength: 1, description: 'Nome do save' },
             club: { type: 'string', minLength: 1, description: 'Clube inicial (deve existir na lista de /api/clubs)' },
+            budget: { type: 'string', pattern: '^€\\d+(\\.\\d+)?(K|M)$', example: '€100M', description: 'Orçamento inicial da temporada' },
           },
         },
       },
@@ -69,8 +70,8 @@ export async function savesRoutes(app: FastifyInstance) {
           properties: {
             currentYear: { type: 'integer', example: 2027 },
             currentSeason: { type: 'string', example: '2027/28' },
-            budget: { type: 'string', example: '£50M' },
-            balance: { type: 'string', example: '£12M' },
+            budget: { type: 'string', pattern: '^€\\d+(\\.\\d+)?(K|M)$', example: '€100M' },
+            balance: { type: 'string', pattern: '^€\\d+(\\.\\d+)?(K|M)$', example: '€12M' },
           },
         },
       },

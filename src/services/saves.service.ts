@@ -34,7 +34,7 @@ export async function getSaveById(saveId: string) {
   return { ...save, currentClubStint }
 }
 
-export async function createSave(data: { name: string; club: string }) {
+export async function createSave(data: { name: string; club: string; budget: string }) {
   if (!clubExists(data.club)) {
     throw new AppError(`Club "${data.club}" not found in the clubs list`, 400)
   }
@@ -45,6 +45,8 @@ export async function createSave(data: { name: string; club: string }) {
         name: data.name,
         currentYear: 2026,
         currentSeason: '2026/27',
+        budget: data.budget,
+        balance: data.budget,
       },
     })
 
@@ -92,13 +94,47 @@ export async function updateSave(
     data.currentSeason && data.currentSeason !== save.currentSeason
 
   await prisma.$transaction(async (tx) => {
-    await tx.save.update({
-      where: { id: saveId },
-      data,
-    })
-
     if (seasonChanged && save.clubStints[0]) {
       const currentStint = save.clubStints[0]
+
+      // Check ending season stats for auto-trophy logic
+      const endingStats = await tx.teamSeasonStats.findFirst({
+        where: { clubStintId: currentStint.id, season: save.currentSeason },
+      })
+
+      if (endingStats) {
+        const trophyYear = data.currentYear ?? save.currentYear
+
+        if (endingStats.leaguePosition === 1) {
+          await tx.trophy.create({
+            data: {
+              clubStintId: currentStint.id,
+              name: `${currentStint.club} — Campeão da Liga ${save.currentSeason}`,
+              year: trophyYear,
+            },
+          })
+        }
+
+        if (endingStats.europeanCupResult === 'Campeao') {
+          await tx.trophy.create({
+            data: {
+              clubStintId: currentStint.id,
+              name: `${currentStint.club} — Campeão Europeu ${save.currentSeason}`,
+              year: trophyYear,
+            },
+          })
+        }
+
+        if (endingStats.nationalCupResult === 'Campeao') {
+          await tx.trophy.create({
+            data: {
+              clubStintId: currentStint.id,
+              name: `${currentStint.club} — Campeão da Copa Nacional ${save.currentSeason}`,
+              year: trophyYear,
+            },
+          })
+        }
+      }
 
       await tx.teamSeasonStats.create({
         data: {
@@ -121,6 +157,11 @@ export async function updateSave(
         })
       }
     }
+
+    await tx.save.update({
+      where: { id: saveId },
+      data,
+    })
   })
 
   return getSaveById(saveId)

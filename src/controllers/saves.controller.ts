@@ -15,7 +15,7 @@ export async function getSave(
 }
 
 export async function createSave(
-  request: FastifyRequest<{ Body: { name: string; club: string } }>,
+  request: FastifyRequest<{ Body: { name: string; club: string; budget: string } }>,
   reply: FastifyReply
 ) {
   const save = await savesService.createSave(request.body)

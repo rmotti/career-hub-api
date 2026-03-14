@@ -1,6 +1,8 @@
 import { prisma } from '../lib/prisma'
 import { AppError, NotFoundError } from '../utils/errors'
 
+type CupResult = 'Campeao' | 'Final' | 'Semifinal' | 'Quartas' | 'OitavasOuFaseDeGrupos' | 'Eliminado' | 'NaoParticipou'
+
 export async function listTeamStats(saveId: string, seasonFilter?: string) {
   const save = await prisma.save.findUnique({
     where: { id: saveId },
@@ -36,6 +38,9 @@ export async function updateTeamStats(
     wins?: number
     draws?: number
     losses?: number
+    leaguePosition?: number
+    europeanCupResult?: CupResult
+    nationalCupResult?: CupResult
   }
 ) {
   if (data.possession !== undefined && (data.possession < 0 || data.possession > 100)) {

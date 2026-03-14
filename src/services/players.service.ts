@@ -1,6 +1,16 @@
 import { prisma } from '../lib/prisma'
-import { NotFoundError } from '../utils/errors'
+import { AppError, NotFoundError } from '../utils/errors'
+import { isValidCurrencyFormat, formatCurrency } from '../utils/currency'
 import { Position, PlayerStatus } from '@prisma/client'
+
+function normalizeCurrency(value: string | number | undefined, fieldName: string): string | undefined {
+  if (value === undefined) return undefined
+  if (typeof value === 'number') return formatCurrency(value)
+  if (!isValidCurrencyFormat(value)) {
+    throw new AppError(`Invalid format for ${fieldName}. Use format like "€750K" or "€1.5M"`, 400)
+  }
+  return value
+}
 
 export async function listPlayers(saveId: string, activeOnly?: boolean) {
   const save = await prisma.save.findUnique({
@@ -109,12 +119,18 @@ export async function createPlayer(
 
   const currentStint = save.clubStints[0]
 
+  const normalizedData = {
+    ...data,
+    salary: normalizeCurrency(data.salary, 'salary'),
+    marketValue: normalizeCurrency(data.marketValue, 'marketValue'),
+  }
+
   const player = await prisma.$transaction(async (tx) => {
     const newPlayer = await tx.player.create({
       data: {
         saveId,
         activeClubStintId: currentStint?.id ?? null,
-        ...data,
+        ...normalizedData,
       },
     })
 
@@ -151,7 +167,13 @@ export async function updatePlayer(
   const player = await prisma.player.findFirst({ where: { id: playerId, saveId } })
   if (!player) throw new NotFoundError('Player not found')
 
-  return prisma.player.update({ where: { id: playerId }, data })
+  const normalizedData = {
+    ...data,
+    salary: normalizeCurrency(data.salary, 'salary'),
+    marketValue: normalizeCurrency(data.marketValue, 'marketValue'),
+  }
+
+  return prisma.player.update({ where: { id: playerId }, data: normalizedData })
 }
 
 export async function updatePlayerStats(

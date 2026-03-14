@@ -1,5 +1,6 @@
 import { prisma } from '../lib/prisma'
 import { NotFoundError } from '../utils/errors'
+import { parseCurrency, formatCurrency } from '../utils/currency'
 import { TransferType, Position, PlayerStatus } from '@prisma/client'
 
 export async function listTransfers(saveId: string, seasonFilter?: string) {
@@ -99,6 +100,20 @@ export async function createTransfer(
         where: { id: data.playerId },
         data: { activeClubStintId: null },
       })
+    }
+
+    if (data.fee && data.fee !== '€0') {
+      const currentSave = await tx.save.findUnique({ where: { id: saveId } })
+      if (currentSave?.balance) {
+        const currentBalance = parseCurrency(currentSave.balance)
+        const fee = parseCurrency(data.fee)
+        const newBalance =
+          data.type === TransferType.compra ? currentBalance - fee : currentBalance + fee
+        await tx.save.update({
+          where: { id: saveId },
+          data: { balance: formatCurrency(newBalance) },
+        })
+      }
     }
 
     return newTransfer

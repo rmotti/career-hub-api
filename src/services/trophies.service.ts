@@ -5,11 +5,20 @@ export async function listTrophies(saveId: string) {
   const save = await prisma.save.findUnique({ where: { id: saveId } })
   if (!save) throw new NotFoundError('Save not found')
 
-  return prisma.trophy.findMany({
+  const trophies = await prisma.trophy.findMany({
     where: { clubStint: { saveId } },
     include: { clubStint: { select: { club: true } } },
     orderBy: { year: 'desc' },
   })
+
+  return trophies.map((t: (typeof trophies)[number]) => ({
+    id: t.id,
+    name: t.name,
+    year: t.year,
+    createdAt: t.createdAt,
+    clubStintId: t.clubStintId,
+    club: t.clubStint.club,
+  }))
 }
 
 export async function createTrophy(
