@@ -1,4 +1,5 @@
 import { FastifyInstance } from 'fastify'
+import { TransferType } from '@prisma/client'
 import * as transfersController from '../controllers/transfers.controller'
 
 export async function transfersRoutes(app: FastifyInstance) {
@@ -29,7 +30,7 @@ export async function transfersRoutes(app: FastifyInstance) {
     Params: { saveId: string }
     Body: {
       playerName: string
-      type: string
+      type: TransferType
       from: string
       to: string
       fee?: string
@@ -73,7 +74,7 @@ Toda a operação é feita em transação Prisma.`,
     Params: { saveId: string; tid: string }
     Body: {
       playerName?: string
-      type?: string
+      type?: TransferType
       from?: string
       to?: string
       fee?: string

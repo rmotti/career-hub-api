@@ -12,7 +12,7 @@ import { transfersRoutes } from './routes/transfers.routes'
 import { trophiesRoutes } from './routes/trophies.routes'
 
 export const app = Fastify({
-  logger: true,
+  logger: process.env.NODE_ENV !== 'production',
   ajv: {
     customOptions: {
       keywords: ['example'],

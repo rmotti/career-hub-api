@@ -1,4 +1,5 @@
 import { FastifyInstance } from 'fastify'
+import { Position, PlayerStatus } from '@prisma/client'
 import * as playersController from '../controllers/players.controller'
 
 export async function playersRoutes(app: FastifyInstance) {
@@ -48,9 +49,9 @@ export async function playersRoutes(app: FastifyInstance) {
     Params: { saveId: string }
     Body: {
       name: string
-      position: string
+      position: Position
       age: number
-      status: string
+      status: PlayerStatus
       ovr: number
       salary?: string
       marketValue?: string
@@ -90,9 +91,9 @@ export async function playersRoutes(app: FastifyInstance) {
     Params: { saveId: string; playerId: string }
     Body: {
       name?: string
-      position?: string
+      position?: Position
       age?: number
-      status?: string
+      status?: PlayerStatus
       ovr?: number
       salary?: string
       marketValue?: string
