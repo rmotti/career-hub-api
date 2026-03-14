@@ -99,27 +99,46 @@ export async function createTransfer(
           }
         }
       } else {
-        // Create new player
-        const newPlayer = await tx.player.create({
-          data: {
-            saveId,
-            name: data.playerName,
-            position: Position.MEI,
-            age: 25,
-            status: PlayerStatus.Role,
-            ovr: 70,
-            activeClubStintId: currentStint?.id ?? null,
-          },
+        // Try to find an existing inactive player with the same name before creating a new one
+        const existingInactivePlayer = await tx.player.findFirst({
+          where: { saveId, name: data.playerName, activeClubStintId: null },
+        })
+
+        const targetPlayerId = existingInactivePlayer
+          ? existingInactivePlayer.id
+          : (
+              await tx.player.create({
+                data: {
+                  saveId,
+                  name: data.playerName,
+                  position: Position.MEI,
+                  age: 25,
+                  status: PlayerStatus.Role,
+                  ovr: 70,
+                  activeClubStintId: null,
+                },
+              })
+            ).id
+
+        await tx.player.update({
+          where: { id: targetPlayerId },
+          data: { activeClubStintId: currentStint?.id ?? null },
         })
 
         if (currentStint) {
-          await tx.playerSeasonStats.create({
-            data: {
-              playerId: newPlayer.id,
-              clubStintId: currentStint.id,
-              season: save.currentSeason,
-            },
+          const existing = await tx.playerSeasonStats.findFirst({
+            where: { playerId: targetPlayerId, clubStintId: currentStint.id, season: save.currentSeason },
           })
+
+          if (!existing) {
+            await tx.playerSeasonStats.create({
+              data: {
+                playerId: targetPlayerId,
+                clubStintId: currentStint.id,
+                season: save.currentSeason,
+              },
+            })
+          }
         }
       }
     } else if (data.type === TransferType.venda && data.playerId) {
