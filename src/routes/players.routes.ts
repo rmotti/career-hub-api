@@ -71,6 +71,7 @@ export async function playersRoutes(app: FastifyInstance) {
         },
         body: {
           type: 'object',
+          additionalProperties: false,
           required: ['name', 'position', 'age', 'status', 'ovr'],
           properties: {
             name: { type: 'string', minLength: 1, example: 'Vinícius Jr.' },
@@ -80,6 +81,7 @@ export async function playersRoutes(app: FastifyInstance) {
             ovr: { type: 'integer', minimum: 40, maximum: 99, example: 91 },
             salary: { type: 'string', pattern: '^€\\d+(\\.\\d+)?(K|M)$', example: '€750K' },
             marketValue: { type: 'string', pattern: '^€\\d+(\\.\\d+)?(K|M)$', example: '€85M' },
+            matches: { type: 'integer', minimum: 0, example: 23 },
           },
         },
       },
@@ -113,6 +115,7 @@ export async function playersRoutes(app: FastifyInstance) {
         },
         body: {
           type: 'object',
+          additionalProperties: false,
           properties: {
             name: { type: 'string', minLength: 1 },
             position: { type: 'string', enum: ['GOL', 'ZAG', 'MEI', 'ATA'] },
@@ -121,6 +124,7 @@ export async function playersRoutes(app: FastifyInstance) {
             ovr: { type: 'integer', minimum: 40, maximum: 99 },
             salary: { type: 'string', pattern: '^€\\d+(\\.\\d+)?(K|M)$' },
             marketValue: { type: 'string', pattern: '^€\\d+(\\.\\d+)?(K|M)$' },
+            matches: { type: 'integer', minimum: 0 },
           },
         },
       },

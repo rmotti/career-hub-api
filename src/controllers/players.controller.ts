@@ -55,6 +55,7 @@ export async function updatePlayer(
       ovr?: number
       salary?: string
       marketValue?: string
+      matches?: number
     }
   }>,
   reply: FastifyReply

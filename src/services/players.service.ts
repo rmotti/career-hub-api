@@ -124,6 +124,7 @@ export async function createPlayer(
     ovr: number
     salary?: string
     marketValue?: string
+    matches?: number
   }
 ) {
   const save = await prisma.save.findUnique({
@@ -134,10 +135,11 @@ export async function createPlayer(
 
   const currentStint = save.clubStints[0]
 
+  const { matches, ...playerFields } = data
   const normalizedData = {
-    ...data,
-    salary: normalizeCurrency(data.salary, 'salary'),
-    marketValue: normalizeCurrency(data.marketValue, 'marketValue'),
+    ...playerFields,
+    salary: normalizeCurrency(playerFields.salary, 'salary'),
+    marketValue: normalizeCurrency(playerFields.marketValue, 'marketValue'),
   }
 
   const player = await prisma.$transaction(async (tx) => {
@@ -155,6 +157,7 @@ export async function createPlayer(
           playerId: newPlayer.id,
           clubStintId: currentStint.id,
           season: save.currentSeason,
+          matches: matches ?? 0,
         },
       })
     }
@@ -177,18 +180,38 @@ export async function updatePlayer(
     salary?: string
     marketValue?: string
     activeClubStintId?: string | null
+    matches?: number
   }
 ) {
   const player = await prisma.player.findFirst({ where: { id: playerId, saveId } })
   if (!player) throw new NotFoundError('Jogador não encontrado neste save.')
 
+  const { matches, ...playerFields } = data
   const normalizedData = {
-    ...data,
-    salary: normalizeCurrency(data.salary, 'salary'),
-    marketValue: normalizeCurrency(data.marketValue, 'marketValue'),
+    ...playerFields,
+    salary: normalizeCurrency(playerFields.salary, 'salary'),
+    marketValue: normalizeCurrency(playerFields.marketValue, 'marketValue'),
   }
 
-  return prisma.player.update({ where: { id: playerId }, data: normalizedData })
+  const updatedPlayer = await prisma.player.update({ where: { id: playerId }, data: normalizedData })
+
+  if (matches !== undefined) {
+    const save = await prisma.save.findUnique({
+      where: { id: saveId },
+      include: { clubStints: { where: { isCurrent: true } } },
+    })
+    if (save?.clubStints[0]) {
+      const currentStint = save.clubStints[0]
+      const stats = await prisma.playerSeasonStats.findFirst({
+        where: { playerId, clubStintId: currentStint.id, season: save.currentSeason },
+      })
+      if (stats) {
+        await prisma.playerSeasonStats.update({ where: { id: stats.id }, data: { matches } })
+      }
+    }
+  }
+
+  return updatedPlayer
 }
 
 export async function updatePlayerStats(
