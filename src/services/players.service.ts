@@ -38,11 +38,14 @@ export async function listPlayers(saveId: string, activeOnly?: boolean) {
       },
     })
 
-    return players.map((p) => ({
-      ...p,
-      currentSeasonStats: p.seasonStats[0] ?? null,
-      seasonStats: undefined,
-    }))
+    return players.map((p) => {
+      const s = p.seasonStats[0] ?? null
+      return {
+        ...p,
+        currentSeasonStats: s ? { ...s, goalContributions: s.goals + s.assists } : null,
+        seasonStats: undefined,
+      }
+    })
   }
 
   const players = await prisma.player.findMany({
@@ -51,16 +54,17 @@ export async function listPlayers(saveId: string, activeOnly?: boolean) {
   })
 
   return players.map((p) => {
-    const totalStats = p.seasonStats.reduce(
+    const totals = p.seasonStats.reduce(
       (acc, s) => ({
         goals: acc.goals + s.goals,
         assists: acc.assists + s.assists,
+        matches: acc.matches + s.matches,
         yellowCards: acc.yellowCards + s.yellowCards,
         redCards: acc.redCards + s.redCards,
       }),
-      { goals: 0, assists: 0, yellowCards: 0, redCards: 0 }
+      { goals: 0, assists: 0, matches: 0, yellowCards: 0, redCards: 0 }
     )
-    return { ...p, totalStats, seasonStats: undefined }
+    return { ...p, totalStats: { ...totals, goalContributions: totals.goals + totals.assists }, seasonStats: undefined }
   })
 }
 
@@ -82,23 +86,28 @@ export async function getPlayerById(saveId: string, playerId: string) {
 
   if (!player) throw new NotFoundError('Jogador não encontrado neste save.')
 
-  const totalStats = player.seasonStats.reduce(
+  const totals = player.seasonStats.reduce(
     (acc, s) => ({
       goals: acc.goals + s.goals,
       assists: acc.assists + s.assists,
+      matches: acc.matches + s.matches,
       yellowCards: acc.yellowCards + s.yellowCards,
       redCards: acc.redCards + s.redCards,
     }),
-    { goals: 0, assists: 0, yellowCards: 0, redCards: 0 }
+    { goals: 0, assists: 0, matches: 0, yellowCards: 0, redCards: 0 }
   )
+
+  const totalStats = { ...totals, goalContributions: totals.goals + totals.assists }
 
   const history = player.seasonStats.map((s) => ({
     club: s.clubStint.club,
     season: s.season,
     goals: s.goals,
     assists: s.assists,
+    matches: s.matches,
     yellowCards: s.yellowCards,
     redCards: s.redCards,
+    goalContributions: s.goals + s.assists,
   }))
 
   const { seasonStats: _, ...playerData } = player
@@ -188,6 +197,7 @@ export async function updatePlayerStats(
   data: {
     goals?: number
     assists?: number
+    matches?: number
     yellowCards?: number
     redCards?: number
   }

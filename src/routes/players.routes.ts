@@ -130,14 +130,14 @@ export async function playersRoutes(app: FastifyInstance) {
 
   app.patch<{
     Params: { saveId: string; playerId: string }
-    Body: { goals?: number; assists?: number; yellowCards?: number; redCards?: number }
+    Body: { goals?: number; assists?: number; matches?: number; yellowCards?: number; redCards?: number }
   }>(
     '/saves/:saveId/players/:playerId/stats',
     {
       schema: {
         tags: ['Players'],
         summary: 'Atualizar stats da temporada atual',
-        description: 'Atualiza o PlayerSeasonStats da currentSeason no ClubStint atual.',
+        description: 'Atualiza o PlayerSeasonStats da currentSeason no ClubStint atual. `goalContributions` é calculado automaticamente e não deve ser enviado.',
         params: {
           type: 'object',
           properties: {
@@ -147,9 +147,11 @@ export async function playersRoutes(app: FastifyInstance) {
         },
         body: {
           type: 'object',
+          additionalProperties: false,
           properties: {
             goals: { type: 'integer', minimum: 0, example: 15 },
             assists: { type: 'integer', minimum: 0, example: 8 },
+            matches: { type: 'integer', minimum: 0, example: 28 },
             yellowCards: { type: 'integer', minimum: 0, example: 3 },
             redCards: { type: 'integer', minimum: 0, example: 0 },
           },

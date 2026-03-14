@@ -70,7 +70,7 @@ export async function updatePlayer(
 export async function updatePlayerStats(
   request: FastifyRequest<{
     Params: { saveId: string; playerId: string }
-    Body: { goals?: number; assists?: number; yellowCards?: number; redCards?: number }
+    Body: { goals?: number; assists?: number; matches?: number; yellowCards?: number; redCards?: number }
   }>,
   reply: FastifyReply
 ) {
