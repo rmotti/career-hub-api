@@ -2,6 +2,7 @@ import { prisma } from '../lib/prisma'
 import { AppError, NotFoundError } from '../utils/errors'
 import { clubExists } from './clubs.service'
 import { formatBalance } from '../utils/currency'
+import { PlayerStatus } from '@prisma/client'
 
 export async function listSaves() {
   const saves = await prisma.save.findMany({
@@ -156,6 +157,25 @@ export async function updateSave(
             season: data.currentSeason!,
           },
         })
+      }
+
+      // C5 — reactivate loaned players returning from loan
+      const loanedPlayers = await tx.player.findMany({
+        where: { saveId, status: PlayerStatus.Loan, activeClubStintId: null },
+      })
+      for (const player of loanedPlayers) {
+        await tx.player.update({
+          where: { id: player.id },
+          data: { activeClubStintId: currentStint.id, status: PlayerStatus.Role },
+        })
+        await tx.playerSeasonStats.create({
+          data: { playerId: player.id, clubStintId: currentStint.id, season: data.currentSeason! },
+        })
+      }
+
+      // C2 — reset balance to new budget when season changes
+      if (data.budget !== undefined) {
+        data.balance = data.budget
       }
     }
 

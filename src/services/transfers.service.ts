@@ -84,11 +84,13 @@ export async function createTransfer(
         ? await tx.player.findFirst({ where: { id: data.playerId, saveId } })
         : null
 
+      const newStatus = data.type === TransferType.emprestimo_entrada ? PlayerStatus.Loan : PlayerStatus.Role
+
       if (existingPlayer) {
         resolvedPlayerId = existingPlayer.id
         await tx.player.update({
           where: { id: existingPlayer.id },
-          data: { activeClubStintId: currentStint?.id ?? null },
+          data: { activeClubStintId: currentStint?.id ?? null, status: newStatus },
         })
       } else {
         const inactiveMatch = await tx.player.findFirst({
@@ -101,7 +103,7 @@ export async function createTransfer(
             name: data.playerName,
             position: Position.MEI,
             age: 25,
-            status: PlayerStatus.Role,
+            status: newStatus,
             ovr: 70,
           },
         })
@@ -109,7 +111,7 @@ export async function createTransfer(
         resolvedPlayerId = targetPlayer.id
         await tx.player.update({
           where: { id: targetPlayer.id },
-          data: { activeClubStintId: currentStint?.id ?? null },
+          data: { activeClubStintId: currentStint?.id ?? null, status: newStatus },
         })
       }
 
@@ -143,7 +145,10 @@ export async function createTransfer(
     if (VENDA_TYPES.includes(data.type) && resolvedPlayerId) {
       await tx.player.update({
         where: { id: resolvedPlayerId },
-        data: { activeClubStintId: null },
+        data: {
+          activeClubStintId: null,
+          ...(data.type === TransferType.emprestimo_saida && { status: PlayerStatus.Loan }),
+        },
       })
     }
 

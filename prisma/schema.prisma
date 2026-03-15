@@ -126,6 +126,7 @@ enum PlayerStatus {
   Role
   Sporadic
   Promising
+  Loan
 }
 
 enum TransferType {
