@@ -23,7 +23,7 @@ export async function savesRoutes(app: FastifyInstance) {
     },
   }, savesController.getSave)
 
-  app.post<{ Body: { name: string; club: string; budget: string } }>(
+  app.post<{ Body: { name: string; club: string; budget: number } }>(
     '/saves',
     {
       schema: {
@@ -36,7 +36,7 @@ export async function savesRoutes(app: FastifyInstance) {
           properties: {
             name: { type: 'string', minLength: 1, description: 'Nome do save' },
             club: { type: 'string', minLength: 1, description: 'Clube inicial (deve existir na lista de /api/clubs)' },
-            budget: { type: 'string', pattern: '^€\\d+(\\.\\d+)?(K|M)$', example: '€100M', description: 'Orçamento inicial da temporada' },
+            budget: { type: 'number', minimum: 0, example: 100, description: 'Orçamento inicial em milhões de €: 100 = €100M' },
           },
         },
       },
@@ -49,8 +49,8 @@ export async function savesRoutes(app: FastifyInstance) {
     Body: {
       currentYear?: number
       currentSeason?: string
-      budget?: string
-      balance?: string
+      budget?: number
+      balance?: number
     }
   }>(
     '/saves/:saveId',
@@ -70,8 +70,8 @@ export async function savesRoutes(app: FastifyInstance) {
           properties: {
             currentYear: { type: 'integer', example: 2027 },
             currentSeason: { type: 'string', example: '2027/28' },
-            budget: { type: 'string', pattern: '^€\\d+(\\.\\d+)?(K|M)$', example: '€100M' },
-            balance: { type: 'string', pattern: '^€\\d+(\\.\\d+)?(K|M)$', example: '€12M' },
+            budget: { type: 'number', minimum: 0, example: 100, description: 'Em milhões de €' },
+            balance: { type: 'number', minimum: 0, example: 12, description: 'Em milhões de €' },
           },
         },
       },

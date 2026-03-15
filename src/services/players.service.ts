@@ -1,26 +1,29 @@
 import { prisma } from '../lib/prisma'
-import { AppError, NotFoundError } from '../utils/errors'
-import { isValidCurrencyFormat, formatCurrency } from '../utils/currency'
+import { NotFoundError } from '../utils/errors'
+import { formatMarketValue, formatSalary } from '../utils/currency'
 import { Position, PlayerStatus } from '@prisma/client'
 
-function normalizeCurrency(value: string | number | undefined, fieldName: 'salary' | 'marketValue'): string | undefined {
-  if (value === undefined) return undefined
-  if (typeof value === 'number') return formatCurrency(value)
-  if (!isValidCurrencyFormat(value)) {
-    if (fieldName === 'salary') {
-      throw new AppError('Formato de salário inválido. Use o formato €XK ou €XM (ex: €75K).', 400)
-    }
-    throw new AppError('Formato de valor de mercado inválido. Use o formato €XK ou €XM (ex: €35M).', 400)
+const VALID_SORT_FIELDS = ['marketValue', 'ovr', 'age'] as const
+type SortField = typeof VALID_SORT_FIELDS[number]
+
+function formatPlayer<T extends { marketValue: number | null; salary: number | null }>(p: T) {
+  return {
+    ...p,
+    marketValueFormatted: formatMarketValue(p.marketValue),
+    salaryFormatted: formatSalary(p.salary),
   }
-  return value
 }
 
-export async function listPlayers(saveId: string, activeOnly?: boolean) {
+export async function listPlayers(saveId: string, activeOnly?: boolean, sort?: string, order?: string) {
   const save = await prisma.save.findUnique({
     where: { id: saveId },
     include: { clubStints: { where: { isCurrent: true } } },
   })
   if (!save) throw new NotFoundError('Save não encontrado.')
+
+  const sortField = VALID_SORT_FIELDS.includes(sort as SortField) ? (sort as SortField) : undefined
+  const orderDir = order === 'asc' ? 'asc' : 'desc'
+  const orderBy = sortField ? { [sortField]: orderDir } : { createdAt: 'asc' as const }
 
   if (activeOnly) {
     const currentStint = save.clubStints[0]
@@ -36,14 +39,15 @@ export async function listPlayers(saveId: string, activeOnly?: boolean) {
           },
         },
       },
+      orderBy,
     })
 
     return players.map((p) => {
       const s = p.seasonStats[0] ?? null
+      const { seasonStats: _, ...rest } = p
       return {
-        ...p,
+        ...formatPlayer(rest),
         currentSeasonStats: s ? { ...s, goalContributions: s.goals + s.assists } : null,
-        seasonStats: undefined,
       }
     })
   }
@@ -51,6 +55,7 @@ export async function listPlayers(saveId: string, activeOnly?: boolean) {
   const players = await prisma.player.findMany({
     where: { saveId },
     include: { seasonStats: true },
+    orderBy,
   })
 
   return players.map((p) => {
@@ -64,7 +69,11 @@ export async function listPlayers(saveId: string, activeOnly?: boolean) {
       }),
       { goals: 0, assists: 0, matches: 0, yellowCards: 0, redCards: 0 }
     )
-    return { ...p, totalStats: { ...totals, goalContributions: totals.goals + totals.assists }, seasonStats: undefined }
+    const { seasonStats: _, ...rest } = p
+    return {
+      ...formatPlayer(rest),
+      totalStats: { ...totals, goalContributions: totals.goals + totals.assists },
+    }
   })
 }
 
@@ -111,7 +120,7 @@ export async function getPlayerById(saveId: string, playerId: string) {
   }))
 
   const { seasonStats: _, ...playerData } = player
-  return { ...playerData, totalStats, history }
+  return { ...formatPlayer(playerData), totalStats, history }
 }
 
 export async function createPlayer(
@@ -122,8 +131,8 @@ export async function createPlayer(
     age: number
     status: PlayerStatus
     ovr: number
-    salary?: string
-    marketValue?: string
+    salary?: number
+    marketValue?: number
     matches?: number
   }
 ) {
@@ -134,20 +143,14 @@ export async function createPlayer(
   if (!save) throw new NotFoundError('Save não encontrado.')
 
   const currentStint = save.clubStints[0]
-
   const { matches, ...playerFields } = data
-  const normalizedData = {
-    ...playerFields,
-    salary: normalizeCurrency(playerFields.salary, 'salary'),
-    marketValue: normalizeCurrency(playerFields.marketValue, 'marketValue'),
-  }
 
   const player = await prisma.$transaction(async (tx) => {
     const newPlayer = await tx.player.create({
       data: {
         saveId,
         activeClubStintId: currentStint?.id ?? null,
-        ...normalizedData,
+        ...playerFields,
       },
     })
 
@@ -165,7 +168,7 @@ export async function createPlayer(
     return newPlayer
   })
 
-  return player
+  return formatPlayer(player)
 }
 
 export async function updatePlayer(
@@ -177,9 +180,8 @@ export async function updatePlayer(
     age?: number
     status?: PlayerStatus
     ovr?: number
-    salary?: string
-    marketValue?: string
-    activeClubStintId?: string | null
+    salary?: number
+    marketValue?: number
     matches?: number
   }
 ) {
@@ -187,13 +189,8 @@ export async function updatePlayer(
   if (!player) throw new NotFoundError('Jogador não encontrado neste save.')
 
   const { matches, ...playerFields } = data
-  const normalizedData = {
-    ...playerFields,
-    salary: normalizeCurrency(playerFields.salary, 'salary'),
-    marketValue: normalizeCurrency(playerFields.marketValue, 'marketValue'),
-  }
 
-  const updatedPlayer = await prisma.player.update({ where: { id: playerId }, data: normalizedData })
+  const updatedPlayer = await prisma.player.update({ where: { id: playerId }, data: playerFields })
 
   if (matches !== undefined) {
     const save = await prisma.save.findUnique({
@@ -211,7 +208,7 @@ export async function updatePlayer(
     }
   }
 
-  return updatedPlayer
+  return formatPlayer(updatedPlayer)
 }
 
 export async function updatePlayerStats(
@@ -238,6 +235,7 @@ export async function updatePlayerStats(
   if (!currentStint) throw new NotFoundError('Nenhum clube ativo encontrado para este save.')
 
   if (player.activeClubStintId !== currentStint.id) {
+    const { AppError } = await import('../utils/errors')
     throw new AppError(`O jogador '${player.name}' não está no elenco ativo desta temporada.`, 400)
   }
 

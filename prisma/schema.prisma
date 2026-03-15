@@ -13,8 +13,8 @@ model Save {
   name           String
   currentYear    Int         @default(2026)
   currentSeason  String      @default("2026/27")
-  budget         String?
-  balance        String?
+  budget         Float?
+  balance        Float?
   clubStints     ClubStint[]
   players        Player[]
   transfers      Transfer[]
@@ -48,8 +48,8 @@ model Player {
   age               Int
   status            PlayerStatus
   ovr               Int
-  salary            String?
-  marketValue       String?
+  salary            Float?
+  marketValue       Float?
   seasonStats       PlayerSeasonStats[]
   transfers         Transfer[]
   createdAt         DateTime           @default(now())
@@ -100,7 +100,7 @@ model Transfer {
   type        TransferType
   from        String
   to          String
-  fee         String?
+  fee         Float?
   season      String
   createdAt   DateTime     @default(now())
 }

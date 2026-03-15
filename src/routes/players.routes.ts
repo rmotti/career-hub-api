@@ -5,12 +5,12 @@ import * as playersController from '../controllers/players.controller'
 export async function playersRoutes(app: FastifyInstance) {
   app.get<{
     Params: { saveId: string }
-    Querystring: { active?: string }
+    Querystring: { active?: string; sort?: string; order?: string }
   }>('/saves/:saveId/players', {
     schema: {
       tags: ['Players'],
       summary: 'Listar jogadores',
-      description: 'Sem query param: todos os jogadores com `totalStats`. Com `?active=true`: apenas elenco ativo com stats da temporada atual.',
+      description: 'Sem query param: todos os jogadores com `totalStats`. Com `?active=true`: apenas elenco ativo com stats da temporada atual. Suporta `sort` (marketValue, ovr, age) e `order` (asc, desc).',
       params: {
         type: 'object',
         properties: {
@@ -21,6 +21,8 @@ export async function playersRoutes(app: FastifyInstance) {
         type: 'object',
         properties: {
           active: { type: 'string', enum: ['true'], description: 'Filtrar apenas jogadores ativos no clube atual' },
+          sort: { type: 'string', enum: ['marketValue', 'ovr', 'age'], description: 'Campo para ordenação' },
+          order: { type: 'string', enum: ['asc', 'desc'], description: 'Direção da ordenação' },
         },
       },
     },
@@ -53,8 +55,8 @@ export async function playersRoutes(app: FastifyInstance) {
       age: number
       status: PlayerStatus
       ovr: number
-      salary?: string
-      marketValue?: string
+      salary?: number
+      marketValue?: number
     }
   }>(
     '/saves/:saveId/players',
@@ -79,8 +81,8 @@ export async function playersRoutes(app: FastifyInstance) {
             age: { type: 'integer', minimum: 15, maximum: 45, example: 26 },
             status: { type: 'string', enum: ['Crucial', 'Important', 'Role', 'Sporadic', 'Promising'] },
             ovr: { type: 'integer', minimum: 40, maximum: 99, example: 91 },
-            salary: { type: 'string', pattern: '^€\\d+(\\.\\d+)?(K|M)$', example: '€750K' },
-            marketValue: { type: 'string', pattern: '^€\\d+(\\.\\d+)?(K|M)$', example: '€85M' },
+            salary: { type: 'number', minimum: 0, example: 75, description: 'Em milhares de €: 75 = €75K' },
+            marketValue: { type: 'number', minimum: 0, example: 35, description: 'Em milhões de €: 35 = €35M, 0.9 = €900K' },
             matches: { type: 'integer', minimum: 0, example: 23 },
           },
         },
@@ -97,8 +99,8 @@ export async function playersRoutes(app: FastifyInstance) {
       age?: number
       status?: PlayerStatus
       ovr?: number
-      salary?: string
-      marketValue?: string
+      salary?: number
+      marketValue?: number
     }
   }>(
     '/saves/:saveId/players/:playerId',
@@ -122,8 +124,8 @@ export async function playersRoutes(app: FastifyInstance) {
             age: { type: 'integer', minimum: 15, maximum: 45 },
             status: { type: 'string', enum: ['Crucial', 'Important', 'Role', 'Sporadic', 'Promising'] },
             ovr: { type: 'integer', minimum: 40, maximum: 99 },
-            salary: { type: 'string', pattern: '^€\\d+(\\.\\d+)?(K|M)$' },
-            marketValue: { type: 'string', pattern: '^€\\d+(\\.\\d+)?(K|M)$' },
+            salary: { type: 'number', minimum: 0, description: 'Em milhares de €: 75 = €75K' },
+            marketValue: { type: 'number', minimum: 0, description: 'Em milhões de €: 35 = €35M, 0.9 = €900K' },
             matches: { type: 'integer', minimum: 0 },
           },
         },

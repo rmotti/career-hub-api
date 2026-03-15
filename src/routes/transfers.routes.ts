@@ -33,7 +33,7 @@ export async function transfersRoutes(app: FastifyInstance) {
       type: TransferType
       from: string
       to: string
-      fee?: string
+      fee?: number
       season: string
       playerId?: string
     }
@@ -60,7 +60,7 @@ Toda a operação é feita em transação Prisma.`,
             type: { type: 'string', enum: ['compra', 'venda'] },
             from: { type: 'string', minLength: 1, example: 'Real Madrid' },
             to: { type: 'string', minLength: 1, example: 'Liverpool' },
-            fee: { type: 'string', example: '£80M' },
+            fee: { type: 'number', minimum: 0, example: 45, description: 'Em milhões de €: 45 = €45M' },
             season: { type: 'string', pattern: '^\\d{4}\\/\\d{2}$', example: '2027/28' },
             playerId: { type: 'string', description: 'UUID do player já existente no save (opcional)' },
           },
@@ -77,7 +77,7 @@ Toda a operação é feita em transação Prisma.`,
       type?: TransferType
       from?: string
       to?: string
-      fee?: string
+      fee?: number
       season?: string
     }
   }>(
@@ -100,7 +100,7 @@ Toda a operação é feita em transação Prisma.`,
             type: { type: 'string', enum: ['compra', 'venda'] },
             from: { type: 'string' },
             to: { type: 'string' },
-            fee: { type: 'string' },
+            fee: { type: 'number', minimum: 0, description: 'Em milhões de €' },
             season: { type: 'string', pattern: '^\\d{4}\\/\\d{2}$' },
           },
         },

@@ -14,9 +14,15 @@ export async function listTeamStats(saveId: string, seasonFilter?: string) {
     const currentStint = save.clubStints[0]
     if (!currentStint) throw new NotFoundError('Nenhum clube ativo encontrado para este save.')
 
-    const stats = await prisma.teamSeasonStats.findFirst({
+    let stats = await prisma.teamSeasonStats.findFirst({
       where: { clubStintId: currentStint.id, season: save.currentSeason },
     })
+
+    if (!stats) {
+      stats = await prisma.teamSeasonStats.create({
+        data: { clubStintId: currentStint.id, season: save.currentSeason },
+      })
+    }
 
     return stats
   }

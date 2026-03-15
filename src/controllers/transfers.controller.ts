@@ -24,7 +24,7 @@ export async function createTransfer(
       type: TransferType
       from: string
       to: string
-      fee?: string
+      fee?: number
       season: string
       playerId?: string
     }
@@ -46,7 +46,7 @@ export async function updateTransfer(
       type?: TransferType
       from?: string
       to?: string
-      fee?: string
+      fee?: number
       season?: string
     }
   }>,

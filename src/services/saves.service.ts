@@ -1,7 +1,7 @@
 import { prisma } from '../lib/prisma'
 import { AppError, NotFoundError } from '../utils/errors'
 import { clubExists } from './clubs.service'
-import { isValidCurrencyFormat } from '../utils/currency'
+import { formatBalance } from '../utils/currency'
 
 export async function listSaves() {
   const saves = await prisma.save.findMany({
@@ -13,35 +13,35 @@ export async function listSaves() {
     orderBy: { createdAt: 'desc' },
   })
 
-  return saves.map((save) => ({
-    ...save,
-    currentClubStint: save.clubStints[0] ?? null,
-    clubStints: undefined,
+  return saves.map(({ clubStints, ...rest }) => ({
+    ...rest,
+    budgetFormatted: formatBalance(rest.budget),
+    balanceFormatted: formatBalance(rest.balance),
+    currentClubStint: clubStints[0] ?? null,
   }))
 }
 
 export async function getSaveById(saveId: string) {
   const save = await prisma.save.findUnique({
     where: { id: saveId },
-    include: {
-      clubStints: true,
-    },
+    include: { clubStints: true },
   })
 
   if (!save) throw new NotFoundError('Save não encontrado.')
 
-  const currentClubStint = save.clubStints.find((cs) => cs.isCurrent) ?? null
-
-  return { ...save, currentClubStint }
+  const { clubStints, ...rest } = save
+  return {
+    ...rest,
+    budgetFormatted: formatBalance(rest.budget),
+    balanceFormatted: formatBalance(rest.balance),
+    currentClubStint: clubStints.find((cs) => cs.isCurrent) ?? null,
+    clubStints,
+  }
 }
 
-export async function createSave(data: { name: string; club: string; budget: string }) {
+export async function createSave(data: { name: string; club: string; budget: number }) {
   if (!clubExists(data.club)) {
     throw new AppError(`Clube inválido: '${data.club}' não encontrado na lista de clubes disponíveis.`, 400)
-  }
-
-  if (!isValidCurrencyFormat(data.budget)) {
-    throw new AppError('Formato de orçamento inválido. Use o formato €XK ou €XM (ex: €85M).', 400)
   }
 
   const save = await prisma.$transaction(async (tx) => {
@@ -82,31 +82,23 @@ export async function updateSave(
   data: {
     currentYear?: number
     currentSeason?: string
-    budget?: string
-    balance?: string
+    budget?: number
+    balance?: number
   }
 ) {
   const save = await prisma.save.findUnique({
     where: { id: saveId },
-    include: {
-      clubStints: { where: { isCurrent: true } },
-    },
+    include: { clubStints: { where: { isCurrent: true } } },
   })
 
   if (!save) throw new NotFoundError('Save não encontrado.')
 
-  if (data.budget && !isValidCurrencyFormat(data.budget)) {
-    throw new AppError('Formato de orçamento inválido. Use o formato €XK ou €XM (ex: €85M).', 400)
-  }
-
-  const seasonChanged =
-    data.currentSeason && data.currentSeason !== save.currentSeason
+  const seasonChanged = data.currentSeason && data.currentSeason !== save.currentSeason
 
   await prisma.$transaction(async (tx) => {
     if (seasonChanged && save.clubStints[0]) {
       const currentStint = save.clubStints[0]
 
-      // Check ending season stats for auto-trophy logic
       const endingStats = await tx.teamSeasonStats.findFirst({
         where: { clubStintId: currentStint.id, season: save.currentSeason },
       })
@@ -167,10 +159,7 @@ export async function updateSave(
       }
     }
 
-    await tx.save.update({
-      where: { id: saveId },
-      data,
-    })
+    await tx.save.update({ where: { id: saveId }, data })
   })
 
   return getSaveById(saveId)

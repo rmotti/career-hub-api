@@ -1,9 +1,19 @@
 import { prisma } from '../lib/prisma'
 import { AppError, NotFoundError } from '../utils/errors'
-import { parseCurrency, formatCurrency, isValidCurrencyFormat } from '../utils/currency'
+import { formatBalance } from '../utils/currency'
 import { TransferType, Position, PlayerStatus } from '@prisma/client'
 
 const SEASON_PATTERN = /^\d{4}\/\d{2}$/
+
+function formatSaveResponse(save: { id: string; balance: number | null; budget: number | null }) {
+  return {
+    id: save.id,
+    balance: save.balance,
+    balanceFormatted: formatBalance(save.balance),
+    budget: save.budget,
+    budgetFormatted: formatBalance(save.budget),
+  }
+}
 
 export async function listTransfers(saveId: string, seasonFilter?: string) {
   const save = await prisma.save.findUnique({ where: { id: saveId } })
@@ -28,7 +38,7 @@ export async function createTransfer(
     type: TransferType
     from: string
     to: string
-    fee?: string
+    fee?: number
     season: string
     playerId?: string
   }
@@ -39,10 +49,6 @@ export async function createTransfer(
 
   if (!SEASON_PATTERN.test(data.season)) {
     throw new AppError('Formato de temporada inválido. Use o formato YYYY/YY (ex: 2028/29).', 400)
-  }
-
-  if (data.fee && data.fee !== '€0' && !isValidCurrencyFormat(data.fee)) {
-    throw new AppError('Formato de valor de transferência inválido. Use o formato €XK ou €XM (ex: €45M).', 400)
   }
 
   const save = await prisma.save.findUnique({
@@ -66,14 +72,13 @@ export async function createTransfer(
     }
   }
 
-  const transfer = await prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const newTransfer = await tx.transfer.create({
       data: { saveId, ...data },
     })
 
     if (data.type === TransferType.compra) {
       if (data.playerId) {
-        // Reactivate existing player
         await tx.player.update({
           where: { id: data.playerId },
           data: { activeClubStintId: currentStint?.id ?? null },
@@ -99,7 +104,6 @@ export async function createTransfer(
           }
         }
       } else {
-        // Try to find an existing inactive player with the same name before creating a new one
         const existingInactivePlayer = await tx.player.findFirst({
           where: { saveId, name: data.playerName, activeClubStintId: null },
         })
@@ -148,24 +152,29 @@ export async function createTransfer(
       })
     }
 
-    if (data.fee && data.fee !== '€0') {
+    let updatedSave = null
+    const fee = data.fee ?? 0
+    if (fee > 0 && (data.type === TransferType.compra || data.type === TransferType.venda)) {
       const currentSave = await tx.save.findUnique({ where: { id: saveId } })
-      if (currentSave?.balance) {
-        const currentBalance = parseCurrency(currentSave.balance)
-        const fee = parseCurrency(data.fee)
+      if (currentSave?.balance != null) {
         const newBalance =
-          data.type === TransferType.compra ? currentBalance - fee : currentBalance + fee
-        await tx.save.update({
+          data.type === TransferType.compra
+            ? currentSave.balance - fee
+            : currentSave.balance + fee
+        updatedSave = await tx.save.update({
           where: { id: saveId },
-          data: { balance: formatCurrency(newBalance) },
+          data: { balance: newBalance },
         })
       }
     }
 
-    return newTransfer
+    return { transfer: newTransfer, save: updatedSave }
   })
 
-  return transfer
+  return {
+    transfer: result.transfer,
+    save: result.save ? formatSaveResponse(result.save) : null,
+  }
 }
 
 export async function updateTransfer(
@@ -176,7 +185,7 @@ export async function updateTransfer(
     type?: TransferType
     from?: string
     to?: string
-    fee?: string
+    fee?: number
     season?: string
   }
 ) {
@@ -187,11 +196,36 @@ export async function updateTransfer(
     throw new AppError('Formato de temporada inválido. Use o formato YYYY/YY (ex: 2028/29).', 400)
   }
 
-  if (data.fee && data.fee !== '€0' && !isValidCurrencyFormat(data.fee)) {
-    throw new AppError('Formato de valor de transferência inválido. Use o formato €XK ou €XM (ex: €45M).', 400)
-  }
+  return prisma.$transaction(async (tx) => {
+    const feeChanged = data.fee !== undefined && data.fee !== transfer.fee
+    const typeChanged = data.type !== undefined && data.type !== transfer.type
 
-  return prisma.transfer.update({ where: { id: tid }, data })
+    if (feeChanged || typeChanged) {
+      const currentSave = await tx.save.findUnique({ where: { id: saveId } })
+      if (currentSave?.balance != null) {
+        let newBalance = currentSave.balance
+
+        // Reverse old fee effect
+        const oldFee = transfer.fee ?? 0
+        if (oldFee > 0) {
+          if (transfer.type === TransferType.compra) newBalance += oldFee
+          else if (transfer.type === TransferType.venda) newBalance -= oldFee
+        }
+
+        // Apply new fee effect
+        const newFee = data.fee ?? transfer.fee ?? 0
+        const newType = data.type ?? transfer.type
+        if (newFee > 0) {
+          if (newType === TransferType.compra) newBalance -= newFee
+          else if (newType === TransferType.venda) newBalance += newFee
+        }
+
+        await tx.save.update({ where: { id: saveId }, data: { balance: newBalance } })
+      }
+    }
+
+    return tx.transfer.update({ where: { id: tid }, data })
+  })
 }
 
 export async function deleteTransfer(saveId: string, tid: string) {

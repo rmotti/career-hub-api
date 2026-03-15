@@ -5,12 +5,17 @@ import { Position, PlayerStatus } from '@prisma/client'
 export async function listPlayers(
   request: FastifyRequest<{
     Params: { saveId: string }
-    Querystring: { active?: string }
+    Querystring: { active?: string; sort?: string; order?: string }
   }>,
   reply: FastifyReply
 ) {
   const activeOnly = request.query.active === 'true'
-  const players = await playersService.listPlayers(request.params.saveId, activeOnly)
+  const players = await playersService.listPlayers(
+    request.params.saveId,
+    activeOnly,
+    request.query.sort,
+    request.query.order
+  )
   return reply.send(players)
 }
 
@@ -34,8 +39,8 @@ export async function createPlayer(
       age: number
       status: PlayerStatus
       ovr: number
-      salary?: string
-      marketValue?: string
+      salary?: number
+      marketValue?: number
     }
   }>,
   reply: FastifyReply
@@ -53,8 +58,8 @@ export async function updatePlayer(
       age?: number
       status?: PlayerStatus
       ovr?: number
-      salary?: string
-      marketValue?: string
+      salary?: number
+      marketValue?: number
       matches?: number
     }
   }>,

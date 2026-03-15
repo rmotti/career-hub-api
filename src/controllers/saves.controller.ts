@@ -15,7 +15,7 @@ export async function getSave(
 }
 
 export async function createSave(
-  request: FastifyRequest<{ Body: { name: string; club: string; budget: string } }>,
+  request: FastifyRequest<{ Body: { name: string; club: string; budget: number } }>,
   reply: FastifyReply
 ) {
   const save = await savesService.createSave(request.body)
@@ -28,8 +28,8 @@ export async function updateSave(
     Body: {
       currentYear?: number
       currentSeason?: string
-      budget?: string
-      balance?: string
+      budget?: number
+      balance?: number
     }
   }>,
   reply: FastifyReply
