@@ -8,9 +8,11 @@ const SEASON_PATTERN = /^\d{4}\/\d{2}$/
 const COMPRA_TYPES: TransferType[] = [TransferType.compra, TransferType.emprestimo_entrada]
 const VENDA_TYPES: TransferType[]  = [TransferType.venda,  TransferType.emprestimo_saida]
 
-function formatSaveResponse(save: { id: string; balance: number | null; budget: number | null }) {
+function formatSaveResponse(save: { id: string; balance: number | null; budget: number | null; currentSeason: string; currentYear: number }) {
   return {
     id: save.id,
+    currentSeason: save.currentSeason,
+    currentYear: save.currentYear,
     balance: save.balance,
     balanceFormatted: formatBalance(save.balance),
     budget: save.budget,

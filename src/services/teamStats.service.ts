@@ -23,7 +23,7 @@ export async function listTeamStats(saveId: string, seasonFilter?: string) {
       })
     }
 
-    return stats
+    return [stats]
   }
 
   return prisma.teamSeasonStats.findMany({
