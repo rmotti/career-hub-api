@@ -32,7 +32,6 @@ export async function teamStatsRoutes(app: FastifyInstance) {
     Body: {
       goalsPro?: number
       goalsAgainst?: number
-      possession?: number
       wins?: number
       draws?: number
       losses?: number
@@ -46,7 +45,6 @@ export async function teamStatsRoutes(app: FastifyInstance) {
       schema: {
         tags: ['Team Stats'],
         summary: 'Atualizar estatísticas da equipe',
-        description: '`possession` deve estar entre 0 e 100.',
         params: {
           type: 'object',
           properties: {
@@ -59,7 +57,6 @@ export async function teamStatsRoutes(app: FastifyInstance) {
           properties: {
             goalsPro: { type: 'integer', minimum: 0, example: 55 },
             goalsAgainst: { type: 'integer', minimum: 0, example: 22 },
-            possession: { type: 'integer', minimum: 0, maximum: 100, example: 57 },
             wins: { type: 'integer', minimum: 0, example: 24 },
             draws: { type: 'integer', minimum: 0, example: 5 },
             losses: { type: 'integer', minimum: 0, example: 9 },

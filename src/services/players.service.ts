@@ -3,9 +3,6 @@ import { NotFoundError } from '../utils/errors'
 import { formatMarketValue, formatSalary } from '../utils/currency'
 import { Position, PlayerStatus } from '@prisma/client'
 
-const VALID_SORT_FIELDS = ['marketValue', 'ovr', 'age'] as const
-type SortField = typeof VALID_SORT_FIELDS[number]
-
 function formatPlayer<T extends { marketValue: number | null; salary: number | null }>(p: T) {
   return {
     ...p,
@@ -14,16 +11,12 @@ function formatPlayer<T extends { marketValue: number | null; salary: number | n
   }
 }
 
-export async function listPlayers(saveId: string, activeOnly?: boolean, sort?: string, order?: string) {
+export async function listPlayers(saveId: string, activeOnly?: boolean) {
   const save = await prisma.save.findUnique({
     where: { id: saveId },
     include: { clubStints: { where: { isCurrent: true } } },
   })
   if (!save) throw new NotFoundError('Save não encontrado.')
-
-  const sortField = VALID_SORT_FIELDS.includes(sort as SortField) ? (sort as SortField) : undefined
-  const orderDir = order === 'asc' ? 'asc' : 'desc'
-  const orderBy = sortField ? { [sortField]: orderDir } : { createdAt: 'asc' as const }
 
   if (activeOnly) {
     const currentStint = save.clubStints[0]
@@ -39,15 +32,18 @@ export async function listPlayers(saveId: string, activeOnly?: boolean, sort?: s
           },
         },
       },
-      orderBy,
+      orderBy: { createdAt: 'asc' },
     })
 
     return players.map((p) => {
       const s = p.seasonStats[0] ?? null
       const { seasonStats: _, ...rest } = p
+      const stats = s
+        ? { ...s, goalContributions: s.goals + s.assists }
+        : { goals: 0, assists: 0, matches: 0, yellowCards: 0, redCards: 0, goalContributions: 0 }
       return {
         ...formatPlayer(rest),
-        currentSeasonStats: s ? { ...s, goalContributions: s.goals + s.assists } : null,
+        currentSeasonStats: stats,
       }
     })
   }
@@ -55,7 +51,7 @@ export async function listPlayers(saveId: string, activeOnly?: boolean, sort?: s
   const players = await prisma.player.findMany({
     where: { saveId },
     include: { seasonStats: true },
-    orderBy,
+    orderBy: { createdAt: 'asc' },
   })
 
   return players.map((p) => {

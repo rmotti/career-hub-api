@@ -79,7 +79,6 @@ model TeamSeasonStats {
   season              String
   goalsPro            Int        @default(0)
   goalsAgainst        Int        @default(0)
-  possession          Int        @default(0)
   wins                Int        @default(0)
   draws               Int        @default(0)
   losses              Int        @default(0)
@@ -132,6 +131,8 @@ enum PlayerStatus {
 enum TransferType {
   compra
   venda
+  emprestimo_entrada
+  emprestimo_saida
 }
 
 enum CupResult {

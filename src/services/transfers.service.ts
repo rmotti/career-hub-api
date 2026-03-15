@@ -59,16 +59,12 @@ export async function createTransfer(
 
   const currentStint = save.clubStints[0]
 
-  if (data.playerId) {
+  // For venda: validate playerId belongs to active squad
+  if (data.type === TransferType.venda && data.playerId) {
     const player = await prisma.player.findFirst({ where: { id: data.playerId, saveId } })
     if (!player) throw new AppError('Jogador não encontrado neste save. Verifique o ID informado.', 404)
-
-    if (data.type === TransferType.venda && !player.activeClubStintId) {
+    if (!player.activeClubStintId) {
       throw new AppError(`Não é possível registrar venda: o jogador '${player.name}' não está no elenco ativo.`, 400)
-    }
-
-    if (data.type === TransferType.compra && player.activeClubStintId) {
-      throw new AppError(`O jogador '${player.name}' já está no elenco ativo desta temporada.`, 400)
     }
   }
 
@@ -77,102 +73,83 @@ export async function createTransfer(
       data: { saveId, ...data },
     })
 
+    let resolvedPlayerId: string | null = null
+
     if (data.type === TransferType.compra) {
-      if (data.playerId) {
+      // If playerId provided and player exists in save → reactivate
+      const existingPlayer = data.playerId
+        ? await tx.player.findFirst({ where: { id: data.playerId, saveId } })
+        : null
+
+      if (existingPlayer) {
+        resolvedPlayerId = existingPlayer.id
         await tx.player.update({
-          where: { id: data.playerId },
+          where: { id: existingPlayer.id },
           data: { activeClubStintId: currentStint?.id ?? null },
         })
-
-        if (currentStint) {
-          const existing = await tx.playerSeasonStats.findFirst({
-            where: {
-              playerId: data.playerId,
-              clubStintId: currentStint.id,
-              season: save.currentSeason,
-            },
-          })
-
-          if (!existing) {
-            await tx.playerSeasonStats.create({
-              data: {
-                playerId: data.playerId,
-                clubStintId: currentStint.id,
-                season: save.currentSeason,
-              },
-            })
-          }
-        }
       } else {
-        const existingInactivePlayer = await tx.player.findFirst({
+        // No playerId or player not found → find inactive by name or create new
+        const inactiveMatch = await tx.player.findFirst({
           where: { saveId, name: data.playerName, activeClubStintId: null },
         })
 
-        const targetPlayerId = existingInactivePlayer
-          ? existingInactivePlayer.id
-          : (
-              await tx.player.create({
-                data: {
-                  saveId,
-                  name: data.playerName,
-                  position: Position.MEI,
-                  age: 25,
-                  status: PlayerStatus.Role,
-                  ovr: 70,
-                  activeClubStintId: null,
-                },
-              })
-            ).id
-
-        await tx.player.update({
-          where: { id: targetPlayerId },
-          data: { activeClubStintId: currentStint?.id ?? null },
+        const targetPlayer = inactiveMatch ?? await tx.player.create({
+          data: {
+            saveId,
+            name: data.playerName,
+            position: Position.MEI,
+            age: 25,
+            status: PlayerStatus.Role,
+            ovr: 70,
+            activeClubStintId: null,
+          },
         })
 
-        if (currentStint) {
-          const existing = await tx.playerSeasonStats.findFirst({
-            where: { playerId: targetPlayerId, clubStintId: currentStint.id, season: save.currentSeason },
-          })
+        resolvedPlayerId = targetPlayer.id
+        await tx.player.update({
+          where: { id: targetPlayer.id },
+          data: { activeClubStintId: currentStint?.id ?? null },
+        })
+      }
 
-          if (!existing) {
-            await tx.playerSeasonStats.create({
-              data: {
-                playerId: targetPlayerId,
-                clubStintId: currentStint.id,
-                season: save.currentSeason,
-              },
-            })
-          }
+      if (currentStint && resolvedPlayerId) {
+        const existing = await tx.playerSeasonStats.findFirst({
+          where: { playerId: resolvedPlayerId, clubStintId: currentStint.id, season: save.currentSeason },
+        })
+        if (!existing) {
+          await tx.playerSeasonStats.create({
+            data: { playerId: resolvedPlayerId, clubStintId: currentStint.id, season: save.currentSeason },
+          })
         }
       }
     } else if (data.type === TransferType.venda && data.playerId) {
+      resolvedPlayerId = data.playerId
       await tx.player.update({
         where: { id: data.playerId },
         data: { activeClubStintId: null },
       })
     }
 
-    let updatedSave = null
+    // Update balance for compra/venda with a fee
     const fee = data.fee ?? 0
-    if (fee > 0 && (data.type === TransferType.compra || data.type === TransferType.venda)) {
-      const currentSave = await tx.save.findUnique({ where: { id: saveId } })
-      if (currentSave?.balance != null) {
-        const newBalance =
-          data.type === TransferType.compra
-            ? currentSave.balance - fee
-            : currentSave.balance + fee
-        updatedSave = await tx.save.update({
-          where: { id: saveId },
-          data: { balance: newBalance },
-        })
-      }
+    let updatedSave = await tx.save.findUnique({ where: { id: saveId } })
+    if (fee > 0 && updatedSave?.balance != null && (data.type === TransferType.compra || data.type === TransferType.venda)) {
+      const newBalance =
+        data.type === TransferType.compra
+          ? updatedSave.balance - fee
+          : updatedSave.balance + fee
+      updatedSave = await tx.save.update({
+        where: { id: saveId },
+        data: { balance: newBalance },
+      })
     }
 
-    return { transfer: newTransfer, save: updatedSave }
+    return { transfer: newTransfer, playerId: resolvedPlayerId, save: updatedSave }
   })
 
   return {
     transfer: result.transfer,
+    playerId: result.playerId,
     save: result.save ? formatSaveResponse(result.save) : null,
   }
 }

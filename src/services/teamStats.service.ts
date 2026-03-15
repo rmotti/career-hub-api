@@ -40,7 +40,6 @@ export async function updateTeamStats(
   data: {
     goalsPro?: number
     goalsAgainst?: number
-    possession?: number
     wins?: number
     draws?: number
     losses?: number
@@ -49,10 +48,6 @@ export async function updateTeamStats(
     nationalCupResult?: CupResult
   }
 ) {
-  if (data.possession !== undefined && (data.possession < 0 || data.possession > 100)) {
-    throw new AppError("O campo 'possession' deve ser um valor entre 0 e 100.", 400)
-  }
-
   if (data.leaguePosition !== undefined && data.leaguePosition < 1) {
     throw new AppError('A posição na liga deve ser um número maior que zero.', 400)
   }
