@@ -1,6 +1,6 @@
 import { prisma } from '../lib/prisma'
 import { AppError, NotFoundError } from '../utils/errors'
-import { formatBalance } from '../utils/currency'
+import { formatBalance, formatMarketValue } from '../utils/currency'
 import { TransferType, Position, PlayerStatus } from '@prisma/client'
 
 const SEASON_PATTERN = /^\d{4}\/\d{2}$/
@@ -15,6 +15,13 @@ function formatSaveResponse(save: { id: string; balance: number | null; budget: 
   }
 }
 
+function formatTransferResponse<T extends { fee: number | null }>(transfer: T) {
+  return {
+    ...transfer,
+    feeFormatted: formatMarketValue(transfer.fee),
+  }
+}
+
 export async function listTransfers(saveId: string, seasonFilter?: string) {
   const save = await prisma.save.findUnique({ where: { id: saveId } })
   if (!save) throw new NotFoundError('Save não encontrado.')
@@ -24,11 +31,13 @@ export async function listTransfers(saveId: string, seasonFilter?: string) {
     where.season = save.currentSeason
   }
 
-  return prisma.transfer.findMany({
+  const transfers = await prisma.transfer.findMany({
     where,
     include: { player: true },
     orderBy: { createdAt: 'desc' },
   })
+
+  return transfers.map(formatTransferResponse)
 }
 
 export async function createTransfer(
@@ -69,14 +78,10 @@ export async function createTransfer(
   }
 
   const result = await prisma.$transaction(async (tx) => {
-    const newTransfer = await tx.transfer.create({
-      data: { saveId, ...data },
-    })
+    let resolvedPlayerId: string | null = data.playerId ?? null
 
-    let resolvedPlayerId: string | null = null
-
+    // ── COMPRA: resolve/create player BEFORE creating the transfer ──
     if (data.type === TransferType.compra) {
-      // If playerId provided and player exists in save → reactivate
       const existingPlayer = data.playerId
         ? await tx.player.findFirst({ where: { id: data.playerId, saveId } })
         : null
@@ -88,7 +93,7 @@ export async function createTransfer(
           data: { activeClubStintId: currentStint?.id ?? null },
         })
       } else {
-        // No playerId or player not found → find inactive by name or create new
+        // No valid playerId → find inactive by name or create new
         const inactiveMatch = await tx.player.findFirst({
           where: { saveId, name: data.playerName, activeClubStintId: null },
         })
@@ -101,7 +106,6 @@ export async function createTransfer(
             age: 25,
             status: PlayerStatus.Role,
             ovr: 70,
-            activeClubStintId: null,
           },
         })
 
@@ -122,8 +126,24 @@ export async function createTransfer(
           })
         }
       }
-    } else if (data.type === TransferType.venda && data.playerId) {
-      resolvedPlayerId = data.playerId
+    }
+
+    // Create transfer with the resolved playerId
+    const newTransfer = await tx.transfer.create({
+      data: {
+        saveId,
+        playerName: data.playerName,
+        type: data.type,
+        from: data.from,
+        to: data.to,
+        fee: data.fee,
+        season: data.season,
+        playerId: resolvedPlayerId,
+      },
+    })
+
+    // ── VENDA: detach player from active squad ──
+    if (data.type === TransferType.venda && data.playerId) {
       await tx.player.update({
         where: { id: data.playerId },
         data: { activeClubStintId: null },
@@ -148,7 +168,7 @@ export async function createTransfer(
   })
 
   return {
-    transfer: result.transfer,
+    transfer: formatTransferResponse(result.transfer),
     playerId: result.playerId,
     save: result.save ? formatSaveResponse(result.save) : null,
   }
