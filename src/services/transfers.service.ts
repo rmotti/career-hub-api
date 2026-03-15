@@ -5,6 +5,9 @@ import { TransferType, Position, PlayerStatus } from '@prisma/client'
 
 const SEASON_PATTERN = /^\d{4}\/\d{2}$/
 
+const COMPRA_TYPES: TransferType[] = [TransferType.compra, TransferType.emprestimo_entrada]
+const VENDA_TYPES: TransferType[]  = [TransferType.venda,  TransferType.emprestimo_saida]
+
 function formatSaveResponse(save: { id: string; balance: number | null; budget: number | null }) {
   return {
     id: save.id,
@@ -16,10 +19,7 @@ function formatSaveResponse(save: { id: string; balance: number | null; budget: 
 }
 
 function formatTransferResponse<T extends { fee: number | null }>(transfer: T) {
-  return {
-    ...transfer,
-    feeFormatted: formatMarketValue(transfer.fee),
-  }
+  return { ...transfer, feeFormatted: formatMarketValue(transfer.fee) }
 }
 
 export async function listTransfers(saveId: string, seasonFilter?: string) {
@@ -27,9 +27,7 @@ export async function listTransfers(saveId: string, seasonFilter?: string) {
   if (!save) throw new NotFoundError('Save não encontrado.')
 
   const where: { saveId: string; season?: string } = { saveId }
-  if (seasonFilter === 'current') {
-    where.season = save.currentSeason
-  }
+  if (seasonFilter === 'current') where.season = save.currentSeason
 
   const transfers = await prisma.transfer.findMany({
     where,
@@ -68,20 +66,20 @@ export async function createTransfer(
 
   const currentStint = save.clubStints[0]
 
-  // For venda: validate playerId belongs to active squad
-  if (data.type === TransferType.venda && data.playerId) {
+  // Validate venda/emprestimo_saida: playerId must belong to active squad
+  if (VENDA_TYPES.includes(data.type) && data.playerId) {
     const player = await prisma.player.findFirst({ where: { id: data.playerId, saveId } })
     if (!player) throw new AppError('Jogador não encontrado neste save. Verifique o ID informado.', 404)
     if (!player.activeClubStintId) {
-      throw new AppError(`Não é possível registrar venda: o jogador '${player.name}' não está no elenco ativo.`, 400)
+      throw new AppError(`Não é possível registrar saída: o jogador '${player.name}' não está no elenco ativo.`, 400)
     }
   }
 
   const result = await prisma.$transaction(async (tx) => {
     let resolvedPlayerId: string | null = data.playerId ?? null
 
-    // ── COMPRA: resolve/create player BEFORE creating the transfer ──
-    if (data.type === TransferType.compra) {
+    // ── ENTRADA (compra / emprestimo_entrada): resolve or create player ──
+    if (COMPRA_TYPES.includes(data.type)) {
       const existingPlayer = data.playerId
         ? await tx.player.findFirst({ where: { id: data.playerId, saveId } })
         : null
@@ -93,7 +91,6 @@ export async function createTransfer(
           data: { activeClubStintId: currentStint?.id ?? null },
         })
       } else {
-        // No valid playerId → find inactive by name or create new
         const inactiveMatch = await tx.player.findFirst({
           where: { saveId, name: data.playerName, activeClubStintId: null },
         })
@@ -142,22 +139,26 @@ export async function createTransfer(
       },
     })
 
-    // ── VENDA: detach player from active squad ──
-    if (data.type === TransferType.venda && data.playerId) {
+    // ── SAÍDA (venda / emprestimo_saida): remove player from active squad ──
+    if (VENDA_TYPES.includes(data.type) && resolvedPlayerId) {
       await tx.player.update({
-        where: { id: data.playerId },
+        where: { id: resolvedPlayerId },
         data: { activeClubStintId: null },
       })
     }
 
-    // Update balance for compra/venda with a fee
+    // Update balance only for compra/venda (not for empréstimos)
     const fee = data.fee ?? 0
-    let updatedSave = await tx.save.findUnique({ where: { id: saveId } })
-    if (fee > 0 && updatedSave?.balance != null && (data.type === TransferType.compra || data.type === TransferType.venda)) {
+    let currentSave = await tx.save.findUnique({ where: { id: saveId } })
+    const balanceAffects = data.type === TransferType.compra || data.type === TransferType.venda
+
+    let updatedSave = currentSave
+    if (fee > 0 && balanceAffects) {
+      const currentBalance = currentSave?.balance ?? 0
       const newBalance =
         data.type === TransferType.compra
-          ? updatedSave.balance - fee
-          : updatedSave.balance + fee
+          ? currentBalance - fee
+          : currentBalance + fee
       updatedSave = await tx.save.update({
         where: { id: saveId },
         data: { balance: newBalance },
@@ -199,26 +200,24 @@ export async function updateTransfer(
 
     if (feeChanged || typeChanged) {
       const currentSave = await tx.save.findUnique({ where: { id: saveId } })
-      if (currentSave?.balance != null) {
-        let newBalance = currentSave.balance
+      let newBalance = currentSave?.balance ?? 0
 
-        // Reverse old fee effect
-        const oldFee = transfer.fee ?? 0
-        if (oldFee > 0) {
-          if (transfer.type === TransferType.compra) newBalance += oldFee
-          else if (transfer.type === TransferType.venda) newBalance -= oldFee
-        }
-
-        // Apply new fee effect
-        const newFee = data.fee ?? transfer.fee ?? 0
-        const newType = data.type ?? transfer.type
-        if (newFee > 0) {
-          if (newType === TransferType.compra) newBalance -= newFee
-          else if (newType === TransferType.venda) newBalance += newFee
-        }
-
-        await tx.save.update({ where: { id: saveId }, data: { balance: newBalance } })
+      // Reverse old fee effect (only for compra/venda)
+      const oldFee = transfer.fee ?? 0
+      if (oldFee > 0) {
+        if (transfer.type === TransferType.compra) newBalance += oldFee
+        else if (transfer.type === TransferType.venda) newBalance -= oldFee
       }
+
+      // Apply new fee effect (only for compra/venda)
+      const newFee = data.fee ?? transfer.fee ?? 0
+      const newType = data.type ?? transfer.type
+      if (newFee > 0) {
+        if (newType === TransferType.compra) newBalance -= newFee
+        else if (newType === TransferType.venda) newBalance += newFee
+      }
+
+      await tx.save.update({ where: { id: saveId }, data: { balance: newBalance } })
     }
 
     return tx.transfer.update({ where: { id: tid }, data })
