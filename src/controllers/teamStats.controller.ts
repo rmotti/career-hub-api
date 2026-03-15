@@ -1,5 +1,6 @@
 import { FastifyRequest, FastifyReply } from 'fastify'
 import * as teamStatsService from '../services/teamStats.service'
+import { CupResult } from '@prisma/client'
 
 export async function listTeamStats(
   request: FastifyRequest<{
@@ -21,10 +22,12 @@ export async function updateTeamStats(
     Body: {
       goalsPro?: number
       goalsAgainst?: number
-      possession?: number
       wins?: number
       draws?: number
       losses?: number
+      leaguePosition?: number
+      europeanCupResult?: CupResult
+      nationalCupResult?: CupResult
     }
   }>,
   reply: FastifyReply

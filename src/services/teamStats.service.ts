@@ -1,7 +1,6 @@
 import { prisma } from '../lib/prisma'
 import { AppError, NotFoundError } from '../utils/errors'
-
-type CupResult = 'Campeao' | 'Final' | 'Semifinal' | 'Quartas' | 'OitavasOuFaseDeGrupos' | 'Eliminado' | 'NaoParticipou'
+import { CupResult } from '@prisma/client'
 
 export async function listTeamStats(saveId: string, seasonFilter?: string) {
   const save = await prisma.save.findUnique({
@@ -52,12 +51,12 @@ export async function updateTeamStats(
     throw new AppError('A posição na liga deve ser um número maior que zero.', 400)
   }
 
-  const validCupResults: CupResult[] = ['Campeao', 'Final', 'Semifinal', 'Quartas', 'OitavasOuFaseDeGrupos', 'Eliminado', 'NaoParticipou']
+  const validCupResults = Object.values(CupResult)
   if (data.europeanCupResult && !validCupResults.includes(data.europeanCupResult)) {
-    throw new AppError('Resultado de copa inválido. Valores aceitos: Campeao, Final, Semifinal, Quartas, OitavasOuFaseDeGrupos, Eliminado, NaoParticipou.', 400)
+    throw new AppError(`Resultado de copa inválido. Valores aceitos: ${validCupResults.join(', ')}.`, 400)
   }
   if (data.nationalCupResult && !validCupResults.includes(data.nationalCupResult)) {
-    throw new AppError('Resultado de copa inválido. Valores aceitos: Campeao, Final, Semifinal, Quartas, OitavasOuFaseDeGrupos, Eliminado, NaoParticipou.', 400)
+    throw new AppError(`Resultado de copa inválido. Valores aceitos: ${validCupResults.join(', ')}.`, 400)
   }
 
   const stats = await prisma.teamSeasonStats.findFirst({
