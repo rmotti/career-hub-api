@@ -1,7 +1,11 @@
 import { prisma } from '../lib/prisma'
-import { NotFoundError } from '../utils/errors'
+import { NotFoundError, AppError } from '../utils/errors'
 import { formatMarketValue, formatSalary } from '../utils/currency'
 import { Position, PlayerStatus } from '@prisma/client'
+
+const POSITION_ORDER: Position[] = [
+  'GOL', 'LD', 'LE', 'ZAG', 'VOL', 'MC', 'ME', 'MD', 'MEI', 'PE', 'PD', 'SA', 'ATA',
+]
 
 function formatPlayer<T extends { marketValue: number | null; salary: number | null }>(p: T) {
   return {
@@ -32,15 +36,18 @@ export async function listPlayers(saveId: string, activeOnly?: boolean) {
           },
         },
       },
-      orderBy: { createdAt: 'asc' },
     })
 
-    return players.map((p) => {
+    const sorted = [...players].sort(
+      (a, b) => POSITION_ORDER.indexOf(a.position) - POSITION_ORDER.indexOf(b.position)
+    )
+
+    return sorted.map((p) => {
       const s = p.seasonStats[0] ?? null
       const { seasonStats: _, ...rest } = p
       const stats = s
         ? { ...s, goalContributions: s.goals + s.assists }
-        : { goals: 0, assists: 0, matches: 0, yellowCards: 0, redCards: 0, goalContributions: 0 }
+        : { goals: 0, assists: 0, matches: 0, yellowCards: 0, redCards: 0, cleanSheets: 0, goalContributions: 0 }
       return {
         ...formatPlayer(rest),
         currentSeasonStats: stats,
@@ -62,8 +69,9 @@ export async function listPlayers(saveId: string, activeOnly?: boolean) {
         matches: acc.matches + s.matches,
         yellowCards: acc.yellowCards + s.yellowCards,
         redCards: acc.redCards + s.redCards,
+        cleanSheets: acc.cleanSheets + s.cleanSheets,
       }),
-      { goals: 0, assists: 0, matches: 0, yellowCards: 0, redCards: 0 }
+      { goals: 0, assists: 0, matches: 0, yellowCards: 0, redCards: 0, cleanSheets: 0 }
     )
     const { seasonStats: _, ...rest } = p
     return {
@@ -98,8 +106,9 @@ export async function getPlayerById(saveId: string, playerId: string) {
       matches: acc.matches + s.matches,
       yellowCards: acc.yellowCards + s.yellowCards,
       redCards: acc.redCards + s.redCards,
+      cleanSheets: acc.cleanSheets + s.cleanSheets,
     }),
-    { goals: 0, assists: 0, matches: 0, yellowCards: 0, redCards: 0 }
+    { goals: 0, assists: 0, matches: 0, yellowCards: 0, redCards: 0, cleanSheets: 0 }
   )
 
   const totalStats = { ...totals, goalContributions: totals.goals + totals.assists }
@@ -112,6 +121,7 @@ export async function getPlayerById(saveId: string, playerId: string) {
     matches: s.matches,
     yellowCards: s.yellowCards,
     redCards: s.redCards,
+    cleanSheets: s.cleanSheets,
     goalContributions: s.goals + s.assists,
   }))
 
@@ -127,6 +137,8 @@ export async function createPlayer(
     age: number
     status: PlayerStatus
     ovr: number
+    potential?: number
+    shirtNumber?: number
     salary?: number
     marketValue?: number
     matches?: number
@@ -137,6 +149,17 @@ export async function createPlayer(
     include: { clubStints: { where: { isCurrent: true } } },
   })
   if (!save) throw new NotFoundError('Save não encontrado.')
+
+  if (data.potential !== undefined && (data.potential < 40 || data.potential > 99)) {
+    throw new AppError('O campo potential deve estar entre 40 e 99.', 400)
+  }
+
+  if (data.shirtNumber !== undefined) {
+    if (data.shirtNumber < 1 || data.shirtNumber > 99) {
+      throw new AppError('O número de camisa deve estar entre 1 e 99.', 400)
+    }
+    await checkShirtNumberConflict(saveId, data.shirtNumber, null)
+  }
 
   const currentStint = save.clubStints[0]
   const { matches, ...playerFields } = data
@@ -176,6 +199,8 @@ export async function updatePlayer(
     age?: number
     status?: PlayerStatus
     ovr?: number
+    potential?: number
+    shirtNumber?: number
     salary?: number
     marketValue?: number
     matches?: number
@@ -183,6 +208,17 @@ export async function updatePlayer(
 ) {
   const player = await prisma.player.findFirst({ where: { id: playerId, saveId } })
   if (!player) throw new NotFoundError('Jogador não encontrado neste save.')
+
+  if (data.potential !== undefined && (data.potential < 40 || data.potential > 99)) {
+    throw new AppError('O campo potential deve estar entre 40 e 99.', 400)
+  }
+
+  if (data.shirtNumber !== undefined) {
+    if (data.shirtNumber < 1 || data.shirtNumber > 99) {
+      throw new AppError('O número de camisa deve estar entre 1 e 99.', 400)
+    }
+    await checkShirtNumberConflict(saveId, data.shirtNumber, playerId)
+  }
 
   const { matches, ...playerFields } = data
 
@@ -216,6 +252,7 @@ export async function updatePlayerStats(
     matches?: number
     yellowCards?: number
     redCards?: number
+    cleanSheets?: number
   }
 ) {
   const save = await prisma.save.findUnique({
@@ -231,7 +268,6 @@ export async function updatePlayerStats(
   if (!currentStint) throw new NotFoundError('Nenhum clube ativo encontrado para este save.')
 
   if (player.activeClubStintId !== currentStint.id) {
-    const { AppError } = await import('../utils/errors')
     throw new AppError(`O jogador '${player.name}' não está no elenco ativo desta temporada.`, 400)
   }
 
@@ -259,4 +295,27 @@ export async function releasePlayer(saveId: string, playerId: string) {
     where: { id: playerId },
     data: { activeClubStintId: null },
   })
+}
+
+async function checkShirtNumberConflict(
+  saveId: string,
+  shirtNumber: number,
+  excludePlayerId: string | null
+) {
+  const conflict = await prisma.player.findFirst({
+    where: {
+      saveId,
+      shirtNumber,
+      activeClubStintId: { not: null },
+      ...(excludePlayerId ? { id: { not: excludePlayerId } } : {}),
+    },
+  })
+
+  if (conflict) {
+    throw new AppError(
+      `O número ${shirtNumber} já está em uso por ${conflict.name} no elenco atual.`,
+      409,
+      'SHIRT_NUMBER_CONFLICT'
+    )
+  }
 }

@@ -70,6 +70,13 @@ app.setSchemaErrorFormatter((errors, _dataVar) => {
 
 app.setErrorHandler((error, _request, reply) => {
   if (error instanceof AppError) {
+    if (error.code) {
+      return reply.status(error.statusCode).send({
+        error: error.code,
+        message: error.message,
+        statusCode: error.statusCode,
+      })
+    }
     return reply.status(error.statusCode).send({
       error: error.message,
       statusCode: error.statusCode,

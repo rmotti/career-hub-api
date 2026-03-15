@@ -11,8 +11,8 @@ datasource db {
 model Save {
   id             String      @id @default(uuid())
   name           String
-  currentYear    Int         @default(2026)
-  currentSeason  String      @default("2026/27")
+  currentYear    Int         @default(2025)
+  currentSeason  String      @default("2025/26")
   budget         Float?
   balance        Float?
   clubStints     ClubStint[]
@@ -48,6 +48,8 @@ model Player {
   age               Int
   status            PlayerStatus
   ovr               Int
+  potential         Int?
+  shirtNumber       Int?
   salary            Float?
   marketValue       Float?
   seasonStats       PlayerSeasonStats[]
@@ -68,6 +70,7 @@ model PlayerSeasonStats {
   matches      Int       @default(0)
   yellowCards  Int       @default(0)
   redCards     Int       @default(0)
+  cleanSheets  Int       @default(0)
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 }
@@ -115,8 +118,17 @@ model Trophy {
 
 enum Position {
   GOL
+  LD
+  LE
   ZAG
+  VOL
+  MC
+  ME
+  MD
   MEI
+  PE
+  PD
+  SA
   ATA
 }
 

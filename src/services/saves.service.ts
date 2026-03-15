@@ -49,8 +49,8 @@ export async function createSave(data: { name: string; club: string; budget: num
     const newSave = await tx.save.create({
       data: {
         name: data.name,
-        currentYear: 2026,
-        currentSeason: '2026/27',
+        currentYear: 2025,
+        currentSeason: '2025/26',
         budget: data.budget,
         balance: data.budget,
       },
@@ -60,7 +60,7 @@ export async function createSave(data: { name: string; club: string; budget: num
       data: {
         saveId: newSave.id,
         club: data.club,
-        startYear: '2026',
+        startYear: '2025',
         isCurrent: true,
       },
     })
@@ -68,7 +68,7 @@ export async function createSave(data: { name: string; club: string; budget: num
     await tx.teamSeasonStats.create({
       data: {
         clubStintId: clubStint.id,
-        season: '2026/27',
+        season: '2025/26',
       },
     })
 
