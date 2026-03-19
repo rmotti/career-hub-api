@@ -21,7 +21,7 @@ export async function teamStatsRoutes(app: FastifyInstance) {
       querystring: {
         type: 'object',
         properties: {
-          season: { type: 'string', enum: ['current'], description: 'Use "current" para filtrar pela temporada atual' },
+          season: { type: 'string', description: 'Use "current" para a temporada atual, ou "2027/28" para uma temporada específica' },
         },
       },
     },

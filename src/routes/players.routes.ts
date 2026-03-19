@@ -5,12 +5,12 @@ import * as playersController from '../controllers/players.controller'
 export async function playersRoutes(app: FastifyInstance) {
   app.get<{
     Params: { saveId: string }
-    Querystring: { active?: string }
+    Querystring: { active?: string; season?: string }
   }>('/saves/:saveId/players', {
     schema: {
       tags: ['Players'],
       summary: 'Listar jogadores',
-      description: 'Sem query param: todos os jogadores com `totalStats`. Com `?active=true`: apenas elenco ativo com stats da temporada atual.',
+      description: 'Sem query param: todos os jogadores com `totalStats`. Com `?active=true`: elenco ativo com stats da temporada atual + `ovrDelta`. Com `?active=true&season=2027/28`: elenco ativo naquela temporada.',
       params: {
         type: 'object',
         properties: {
@@ -21,6 +21,7 @@ export async function playersRoutes(app: FastifyInstance) {
         type: 'object',
         properties: {
           active: { type: 'string', enum: ['true'], description: 'Filtrar apenas jogadores ativos no clube atual' },
+          season: { type: 'string', description: 'Temporada específica (ex: 2027/28). Padrão: temporada atual.' },
         },
       },
     },

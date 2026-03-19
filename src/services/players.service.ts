@@ -15,7 +15,7 @@ function formatPlayer<T extends { marketValue: number | null; salary: number | n
   }
 }
 
-export async function listPlayers(saveId: string, activeOnly?: boolean) {
+export async function listPlayers(saveId: string, activeOnly?: boolean, season?: string) {
   const save = await prisma.save.findUnique({
     where: { id: saveId },
     include: { clubStints: { where: { isCurrent: true } } },
@@ -26,33 +26,60 @@ export async function listPlayers(saveId: string, activeOnly?: boolean) {
     const currentStint = save.clubStints[0]
     if (!currentStint) return []
 
-    const players = await prisma.player.findMany({
-      where: { saveId, activeClubStintId: currentStint.id },
-      include: {
-        seasonStats: {
-          where: {
-            clubStintId: currentStint.id,
-            season: save.currentSeason,
+    const isCurrentSeason = !season || season === save.currentSeason
+
+    if (isCurrentSeason) {
+      const players = await prisma.player.findMany({
+        where: { saveId, activeClubStintId: currentStint.id },
+        include: {
+          seasonStats: {
+            where: { clubStintId: currentStint.id, season: save.currentSeason },
+          },
+          ovrHistory: {
+            orderBy: { createdAt: 'desc' },
+            take: 1,
           },
         },
-      },
+      })
+
+      const sorted = [...players].sort(
+        (a, b) => POSITION_ORDER.indexOf(a.position) - POSITION_ORDER.indexOf(b.position)
+      )
+
+      return sorted.map((p) => {
+        const s = p.seasonStats[0] ?? null
+        const lastHistory = p.ovrHistory[0] ?? null
+        const { seasonStats: _, ovrHistory: __, ...rest } = p
+        const stats = s
+          ? { ...s, goalContributions: s.goals + s.assists }
+          : { goals: 0, assists: 0, matches: 0, yellowCards: 0, redCards: 0, cleanSheets: 0, goalContributions: 0 }
+        return {
+          ...formatPlayer(rest),
+          currentSeasonStats: stats,
+          ovrDelta: lastHistory !== null ? p.ovr - lastHistory.ovr : null,
+          marketValueDelta: (lastHistory !== null && p.marketValue !== null && lastHistory.marketValue !== null)
+            ? p.marketValue - lastHistory.marketValue
+            : null,
+        }
+      })
+    }
+
+    // Historical season: players who had stats recorded in that season for this club stint
+    const historicalStats = await prisma.playerSeasonStats.findMany({
+      where: { clubStintId: currentStint.id, season },
+      include: { player: true },
     })
 
-    const sorted = [...players].sort(
-      (a, b) => POSITION_ORDER.indexOf(a.position) - POSITION_ORDER.indexOf(b.position)
+    const sorted = [...historicalStats].sort(
+      (a, b) => POSITION_ORDER.indexOf(a.player.position) - POSITION_ORDER.indexOf(b.player.position)
     )
 
-    return sorted.map((p) => {
-      const s = p.seasonStats[0] ?? null
-      const { seasonStats: _, ...rest } = p
-      const stats = s
-        ? { ...s, goalContributions: s.goals + s.assists }
-        : { goals: 0, assists: 0, matches: 0, yellowCards: 0, redCards: 0, cleanSheets: 0, goalContributions: 0 }
-      return {
-        ...formatPlayer(rest),
-        currentSeasonStats: stats,
-      }
-    })
+    return sorted.map(({ player: p, ...s }) => ({
+      ...formatPlayer(p),
+      currentSeasonStats: { ...s, goalContributions: s.goals + s.assists },
+      ovrDelta: null,
+      marketValueDelta: null,
+    }))
   }
 
   const players = await prisma.player.findMany({
@@ -94,6 +121,9 @@ export async function getPlayerById(saveId: string, playerId: string) {
       seasonStats: {
         include: { clubStint: true },
       },
+      ovrHistory: {
+        orderBy: { createdAt: 'asc' },
+      },
     },
   })
 
@@ -125,8 +155,14 @@ export async function getPlayerById(saveId: string, playerId: string) {
     goalContributions: s.goals + s.assists,
   }))
 
-  const { seasonStats: _, ...playerData } = player
-  return { ...formatPlayer(playerData), totalStats, history }
+  const ovrHistory = player.ovrHistory.map((h) => ({
+    season: h.season,
+    ovr: h.ovr,
+    marketValue: h.marketValue,
+  }))
+
+  const { seasonStats: _, ovrHistory: __, ...playerData } = player
+  return { ...formatPlayer(playerData), totalStats, history, ovrHistory }
 }
 
 export async function createPlayer(

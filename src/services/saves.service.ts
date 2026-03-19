@@ -30,13 +30,24 @@ export async function getSaveById(saveId: string) {
 
   if (!save) throw new NotFoundError('Save não encontrado.')
 
+  const currentStint = save.clubStints.find((cs) => cs.isCurrent) ?? null
+
+  const teamStats = currentStint
+    ? await prisma.teamSeasonStats.findMany({
+        where: { clubStintId: currentStint.id },
+        orderBy: { createdAt: 'asc' },
+        select: { season: true },
+      })
+    : []
+
   const { clubStints, ...rest } = save
   return {
     ...rest,
     budgetFormatted: formatBalance(rest.budget),
     balanceFormatted: formatBalance(rest.balance),
-    currentClubStint: clubStints.find((cs) => cs.isCurrent) ?? null,
+    currentClubStint: currentStint,
     clubStints,
+    availableSeasons: teamStats.map((s) => s.season),
   }
 }
 
@@ -138,28 +149,41 @@ export async function updateSave(
         }
       }
 
-      await tx.teamSeasonStats.create({
-        data: {
-          clubStintId: currentStint.id,
-          season: data.currentSeason!,
-        },
-      })
-
       const activePlayers = await tx.player.findMany({
         where: { saveId, activeClubStintId: currentStint.id },
       })
 
+      // T3 — Step 1: snapshot OVR and marketValue before the new season starts
+      await tx.playerOvrHistory.createMany({
+        data: activePlayers.map((p) => ({
+          playerId: p.id,
+          season: save.currentSeason,
+          ovr: p.ovr,
+          marketValue: p.marketValue,
+        })),
+      })
+
+      // T2 — Step 2: increment age for all active players (max 45)
+      await tx.player.updateMany({
+        where: { saveId, activeClubStintId: currentStint.id, age: { lt: 45 } },
+        data: { age: { increment: 1 } },
+      })
+
+      // Step 3: save update happens below via tx.save.update
+
+      // Step 4: new TeamSeasonStats for the new season
+      await tx.teamSeasonStats.create({
+        data: { clubStintId: currentStint.id, season: data.currentSeason! },
+      })
+
+      // Step 5: new PlayerSeasonStats for each active player
       for (const player of activePlayers) {
         await tx.playerSeasonStats.create({
-          data: {
-            playerId: player.id,
-            clubStintId: currentStint.id,
-            season: data.currentSeason!,
-          },
+          data: { playerId: player.id, clubStintId: currentStint.id, season: data.currentSeason! },
         })
       }
 
-      // C5 — reactivate loaned players returning from loan
+      // Step 6 (C5) — reactivate loaned players returning from loan
       const loanedPlayers = await tx.player.findMany({
         where: { saveId, status: PlayerStatus.Loan, activeClubStintId: null },
       })
