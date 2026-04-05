@@ -85,6 +85,8 @@ model PlayerSeasonStats {
   cleanSheets  Int       @default(0)
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
+
+  @@unique([playerId, clubStintId, season])
 }
 
 model TeamSeasonStats {
@@ -102,6 +104,8 @@ model TeamSeasonStats {
   nationalCupResult   CupResult  @default(NaoParticipou)
   createdAt           DateTime   @default(now())
   updatedAt           DateTime   @updatedAt
+
+  @@unique([clubStintId, season])
 }
 
 model Transfer {

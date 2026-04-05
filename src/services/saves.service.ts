@@ -116,36 +116,43 @@ export async function updateSave(
       })
 
       if (endingStats) {
-        const trophyYear = data.currentYear ?? save.currentYear
+        // Always use the OLD year (the year of the season that just ended)
+        const trophyYear = save.currentYear
 
         if (endingStats.leaguePosition === 1) {
-          await tx.trophy.create({
-            data: {
-              clubStintId: currentStint.id,
-              name: `${currentStint.club} — Campeão da Liga ${save.currentSeason}`,
-              year: trophyYear,
-            },
+          const leagueTrophyName = `${currentStint.club} — Campeão da Liga ${save.currentSeason}`
+          const exists = await tx.trophy.findFirst({
+            where: { clubStintId: currentStint.id, name: leagueTrophyName },
           })
+          if (!exists) {
+            await tx.trophy.create({
+              data: { clubStintId: currentStint.id, name: leagueTrophyName, year: trophyYear },
+            })
+          }
         }
 
         if (endingStats.europeanCupResult === 'Campeao') {
-          await tx.trophy.create({
-            data: {
-              clubStintId: currentStint.id,
-              name: `${currentStint.club} — Campeão Europeu ${save.currentSeason}`,
-              year: trophyYear,
-            },
+          const euTrophyName = `${currentStint.club} — Campeão Europeu ${save.currentSeason}`
+          const exists = await tx.trophy.findFirst({
+            where: { clubStintId: currentStint.id, name: euTrophyName },
           })
+          if (!exists) {
+            await tx.trophy.create({
+              data: { clubStintId: currentStint.id, name: euTrophyName, year: trophyYear },
+            })
+          }
         }
 
         if (endingStats.nationalCupResult === 'Campeao') {
-          await tx.trophy.create({
-            data: {
-              clubStintId: currentStint.id,
-              name: `${currentStint.club} — Campeão da Copa Nacional ${save.currentSeason}`,
-              year: trophyYear,
-            },
+          const cupTrophyName = `${currentStint.club} — Campeão da Copa Nacional ${save.currentSeason}`
+          const exists = await tx.trophy.findFirst({
+            where: { clubStintId: currentStint.id, name: cupTrophyName },
           })
+          if (!exists) {
+            await tx.trophy.create({
+              data: { clubStintId: currentStint.id, name: cupTrophyName, year: trophyYear },
+            })
+          }
         }
       }
 
@@ -153,15 +160,23 @@ export async function updateSave(
         where: { saveId, activeClubStintId: currentStint.id },
       })
 
-      // T3 — Step 1: snapshot OVR and marketValue before the new season starts
-      await tx.playerOvrHistory.createMany({
-        data: activePlayers.map((p) => ({
-          playerId: p.id,
-          season: save.currentSeason,
-          ovr: p.ovr,
-          marketValue: p.marketValue,
-        })),
+      // T3 — Step 1: snapshot OVR and marketValue before the new season starts (skip if already exists)
+      const existingSnapshots = await tx.playerOvrHistory.findMany({
+        where: { season: save.currentSeason, playerId: { in: activePlayers.map((p) => p.id) } },
+        select: { playerId: true },
       })
+      const snappedPlayerIds = new Set(existingSnapshots.map((s) => s.playerId))
+      const newSnapshots = activePlayers.filter((p) => !snappedPlayerIds.has(p.id))
+      if (newSnapshots.length > 0) {
+        await tx.playerOvrHistory.createMany({
+          data: newSnapshots.map((p) => ({
+            playerId: p.id,
+            season: save.currentSeason,
+            ovr: p.ovr,
+            marketValue: p.marketValue,
+          })),
+        })
+      }
 
       // T2 — Step 2: increment age for all active players (max 45)
       await tx.player.updateMany({
@@ -171,16 +186,28 @@ export async function updateSave(
 
       // Step 3: save update happens below via tx.save.update
 
-      // Step 4: new TeamSeasonStats for the new season
-      await tx.teamSeasonStats.create({
-        data: { clubStintId: currentStint.id, season: data.currentSeason! },
+      // Step 4: new TeamSeasonStats for the new season (skip if already exists)
+      const existingTeamStats = await tx.teamSeasonStats.findFirst({
+        where: { clubStintId: currentStint.id, season: data.currentSeason! },
       })
-
-      // Step 5: new PlayerSeasonStats for each active player
-      for (const player of activePlayers) {
-        await tx.playerSeasonStats.create({
-          data: { playerId: player.id, clubStintId: currentStint.id, season: data.currentSeason! },
+      if (!existingTeamStats) {
+        await tx.teamSeasonStats.create({
+          data: { clubStintId: currentStint.id, season: data.currentSeason! },
         })
+      }
+
+      // Step 5: new PlayerSeasonStats for each active player (skip if already exists)
+      const existingPlayerStats = await tx.playerSeasonStats.findMany({
+        where: { clubStintId: currentStint.id, season: data.currentSeason!, playerId: { in: activePlayers.map((p) => p.id) } },
+        select: { playerId: true },
+      })
+      const existingPlayerIds = new Set(existingPlayerStats.map((s) => s.playerId))
+      for (const player of activePlayers) {
+        if (!existingPlayerIds.has(player.id)) {
+          await tx.playerSeasonStats.create({
+            data: { playerId: player.id, clubStintId: currentStint.id, season: data.currentSeason! },
+          })
+        }
       }
 
       // Step 6 (C5) — reactivate loaned players returning from loan
@@ -192,9 +219,14 @@ export async function updateSave(
           where: { id: player.id },
           data: { activeClubStintId: currentStint.id, status: PlayerStatus.Role },
         })
-        await tx.playerSeasonStats.create({
-          data: { playerId: player.id, clubStintId: currentStint.id, season: data.currentSeason! },
+        const loanedStatsExist = await tx.playerSeasonStats.findFirst({
+          where: { playerId: player.id, clubStintId: currentStint.id, season: data.currentSeason! },
         })
+        if (!loanedStatsExist) {
+          await tx.playerSeasonStats.create({
+            data: { playerId: player.id, clubStintId: currentStint.id, season: data.currentSeason! },
+          })
+        }
       }
 
       // C2 — reset balance to new budget when season changes

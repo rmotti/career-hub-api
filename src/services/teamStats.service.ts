@@ -15,13 +15,15 @@ export async function listTeamStats(saveId: string, seasonFilter?: string) {
 
     const targetSeason = seasonFilter === 'current' ? save.currentSeason : seasonFilter
 
-    let stats = await prisma.teamSeasonStats.findFirst({
-      where: { clubStintId: currentStint.id, season: targetSeason },
+    let stats = await prisma.teamSeasonStats.findUnique({
+      where: { clubStintId_season: { clubStintId: currentStint.id, season: targetSeason } },
     })
 
     if (!stats && seasonFilter === 'current') {
-      stats = await prisma.teamSeasonStats.create({
-        data: { clubStintId: currentStint.id, season: targetSeason },
+      stats = await prisma.teamSeasonStats.upsert({
+        where: { clubStintId_season: { clubStintId: currentStint.id, season: targetSeason } },
+        create: { clubStintId: currentStint.id, season: targetSeason },
+        update: {},
       })
     }
 
