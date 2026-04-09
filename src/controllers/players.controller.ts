@@ -36,6 +36,7 @@ export async function createPlayer(
       ovr: number
       potential?: number
       shirtNumber?: number
+      nation?: string
       salary?: number
       marketValue?: number
     }
@@ -57,6 +58,7 @@ export async function updatePlayer(
       ovr?: number
       potential?: number
       shirtNumber?: number
+      nation?: string
       salary?: number
       marketValue?: number
       matches?: number

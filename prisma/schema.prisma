@@ -50,6 +50,7 @@ model Player {
   ovr               Int
   potential         Int?
   shirtNumber       Int?
+  nation            String?
   salary            Float?
   marketValue       Float?
   seasonStats       PlayerSeasonStats[]
