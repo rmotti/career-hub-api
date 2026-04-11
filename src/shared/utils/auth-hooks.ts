@@ -1,6 +1,6 @@
 import { FastifyRequest, FastifyReply } from 'fastify'
-import { auth } from '../lib/auth'
-import { AppError } from './errors'
+import { auth } from '../lib/auth.js'
+import { AppError } from './errors.js'
 
 type UserRole = 'ADMIN' | 'USER'
 type UserPlan = 'FREE' | 'PRO' | 'PREMIUM'

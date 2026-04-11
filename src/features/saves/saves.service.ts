@@ -1,7 +1,7 @@
-import { prisma } from '../../shared/lib/prisma'
-import { AppError, NotFoundError } from '../../shared/utils/errors'
-import { clubExists } from '../clubs/clubs.service'
-import { formatBalance } from '../../shared/utils/currency'
+import { prisma } from '../../shared/lib/prisma.js'
+import { AppError, NotFoundError } from '../../shared/utils/errors.js'
+import { clubExists } from '../clubs/clubs.service.js'
+import { formatBalance } from '../../shared/utils/currency.js'
 import { PlayerStatus } from '@prisma/client'
 
 export async function listSaves(userId: string) {

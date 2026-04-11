@@ -1,6 +1,6 @@
-import { prisma } from '../../shared/lib/prisma'
-import { AppError, NotFoundError } from '../../shared/utils/errors'
-import { formatBalance, formatMarketValue } from '../../shared/utils/currency'
+import { prisma } from '../../shared/lib/prisma.js'
+import { AppError, NotFoundError } from '../../shared/utils/errors.js'
+import { formatBalance, formatMarketValue } from '../../shared/utils/currency.js'
 import { TransferType, Position, PlayerStatus } from '@prisma/client'
 
 const SEASON_PATTERN = /^\d{4}\/\d{2}$/

@@ -1,6 +1,6 @@
-import { prisma } from '../../shared/lib/prisma'
-import { NotFoundError, AppError } from '../../shared/utils/errors'
-import { formatMarketValue, formatSalary } from '../../shared/utils/currency'
+import { prisma } from '../../shared/lib/prisma.js'
+import { NotFoundError, AppError } from '../../shared/utils/errors.js'
+import { formatMarketValue, formatSalary } from '../../shared/utils/currency.js'
 import { Position, PlayerStatus } from '@prisma/client'
 
 const POSITION_ORDER: Position[] = [

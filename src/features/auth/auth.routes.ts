@@ -1,5 +1,5 @@
 import { FastifyInstance } from 'fastify'
-import { auth } from '../../shared/lib/auth'
+import { auth } from '../../shared/lib/auth.js'
 
 function toBetterAuthRequest(request: {
   url: string

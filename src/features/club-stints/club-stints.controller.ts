@@ -1,5 +1,5 @@
 import { FastifyRequest, FastifyReply } from 'fastify'
-import * as clubStintsService from './club-stints.service'
+import * as clubStintsService from './club-stints.service.js'
 
 export async function listClubStints(
   request: FastifyRequest<{ Params: { saveId: string } }>,

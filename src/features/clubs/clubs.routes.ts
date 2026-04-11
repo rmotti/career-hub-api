@@ -1,5 +1,5 @@
 import { FastifyInstance } from 'fastify'
-import { listClubs, listClubsByLeague } from './clubs.controller'
+import { listClubs, listClubsByLeague } from './clubs.controller.js'
 
 export async function clubsRoutes(app: FastifyInstance) {
   app.get('/clubs', {

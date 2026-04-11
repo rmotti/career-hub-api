@@ -1,5 +1,5 @@
 import { FastifyInstance } from 'fastify'
-import * as trophiesController from './trophies.controller'
+import * as trophiesController from './trophies.controller.js'
 
 export async function trophiesRoutes(app: FastifyInstance) {
   app.get<{ Params: { saveId: string } }>(

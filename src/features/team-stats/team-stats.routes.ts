@@ -1,5 +1,5 @@
 import { FastifyInstance } from 'fastify'
-import * as teamStatsController from './team-stats.controller'
+import * as teamStatsController from './team-stats.controller.js'
 
 const CUP_RESULT_VALUES = ['Campeao', 'Final', 'Semifinal', 'Quartas', 'OitavasOuFaseDeGrupos', 'Eliminado', 'NaoParticipou'] as const
 

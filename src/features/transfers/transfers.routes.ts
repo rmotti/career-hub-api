@@ -1,6 +1,6 @@
 import { FastifyInstance } from 'fastify'
 import { TransferType } from '@prisma/client'
-import * as transfersController from './transfers.controller'
+import * as transfersController from './transfers.controller.js'
 
 export async function transfersRoutes(app: FastifyInstance) {
   app.get<{

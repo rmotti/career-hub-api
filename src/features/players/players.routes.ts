@@ -1,6 +1,6 @@
 import { FastifyInstance } from 'fastify'
 import { Position, PlayerStatus } from '@prisma/client'
-import * as playersController from './players.controller'
+import * as playersController from './players.controller.js'
 
 export async function playersRoutes(app: FastifyInstance) {
   app.get<{

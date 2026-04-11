@@ -1,5 +1,5 @@
 import { IncomingMessage, ServerResponse } from 'http'
-import { app } from './app'
+import { app } from './app.js'
 
 if (!process.env.VERCEL) {
   const port = Number(process.env.PORT) || 3333

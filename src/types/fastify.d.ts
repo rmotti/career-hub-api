@@ -1,4 +1,4 @@
-import { Session } from '../shared/lib/auth'
+import { Session } from '../shared/lib/auth.js'
 
 declare module 'fastify' {
   interface FastifyRequest {
