@@ -1,5 +1,5 @@
 import { FastifyRequest, FastifyReply } from 'fastify'
-import * as trophiesService from '../services/trophies.service'
+import * as trophiesService from './trophies.service'
 
 export async function listTrophies(
   request: FastifyRequest<{ Params: { saveId: string } }>,

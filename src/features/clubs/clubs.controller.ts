@@ -1,5 +1,5 @@
 import { FastifyRequest, FastifyReply } from 'fastify'
-import { getAllClubs, CLUBS_BY_LEAGUE } from '../services/clubs.service'
+import { getAllClubs, CLUBS_BY_LEAGUE } from './clubs.service'
 
 export async function listClubs(_request: FastifyRequest, reply: FastifyReply) {
   const clubs = getAllClubs()

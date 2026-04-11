@@ -1,5 +1,5 @@
 import { FastifyRequest, FastifyReply } from 'fastify'
-import * as savesService from '../services/saves.service'
+import * as savesService from './saves.service'
 
 export async function listSaves(_request: FastifyRequest, reply: FastifyReply) {
   const saves = await savesService.listSaves()

@@ -1,5 +1,5 @@
 import { FastifyRequest, FastifyReply } from 'fastify'
-import * as playersService from '../services/players.service'
+import * as playersService from './players.service'
 import { Position, PlayerStatus } from '@prisma/client'
 
 export async function listPlayers(

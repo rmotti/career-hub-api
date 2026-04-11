@@ -1,5 +1,5 @@
 import { FastifyRequest, FastifyReply } from 'fastify'
-import * as transfersService from '../services/transfers.service'
+import * as transfersService from './transfers.service'
 import { TransferType } from '@prisma/client'
 
 export async function listTransfers(

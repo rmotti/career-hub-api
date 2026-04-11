@@ -1,5 +1,5 @@
 import { FastifyInstance } from 'fastify'
-import * as clubStintsController from '../controllers/clubStints.controller'
+import * as clubStintsController from './club-stints.controller'
 
 export async function clubStintsRoutes(app: FastifyInstance) {
   app.get<{ Params: { saveId: string } }>(

@@ -1,6 +1,6 @@
-import { prisma } from '../lib/prisma'
-import { AppError, NotFoundError } from '../utils/errors'
-import { clubExists } from './clubs.service'
+import { prisma } from '../../shared/lib/prisma'
+import { AppError, NotFoundError } from '../../shared/utils/errors'
+import { clubExists } from '../clubs/clubs.service'
 
 export async function listClubStints(saveId: string) {
   const save = await prisma.save.findUnique({ where: { id: saveId } })

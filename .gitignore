@@ -139,5 +139,6 @@ vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 
 # Claude files
-.claude
+.claude/
+.claude/**
 .vercel

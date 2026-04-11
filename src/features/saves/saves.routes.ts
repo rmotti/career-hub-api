@@ -1,5 +1,5 @@
 import { FastifyInstance } from 'fastify'
-import * as savesController from '../controllers/saves.controller'
+import * as savesController from './saves.controller'
 
 export async function savesRoutes(app: FastifyInstance) {
   app.get('/saves', {

@@ -1,5 +1,5 @@
 import { FastifyRequest, FastifyReply } from 'fastify'
-import * as teamStatsService from '../services/teamStats.service'
+import * as teamStatsService from './team-stats.service'
 import { CupResult } from '@prisma/client'
 
 export async function listTeamStats(

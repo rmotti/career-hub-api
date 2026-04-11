@@ -1,5 +1,5 @@
-import { prisma } from '../lib/prisma'
-import { AppError, NotFoundError } from '../utils/errors'
+import { prisma } from '../../shared/lib/prisma'
+import { AppError, NotFoundError } from '../../shared/utils/errors'
 import { CupResult } from '@prisma/client'
 
 export async function listTeamStats(saveId: string, seasonFilter?: string) {

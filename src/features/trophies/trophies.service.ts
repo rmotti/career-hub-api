@@ -1,5 +1,5 @@
-import { prisma } from '../lib/prisma'
-import { AppError, NotFoundError } from '../utils/errors'
+import { prisma } from '../../shared/lib/prisma'
+import { AppError, NotFoundError } from '../../shared/utils/errors'
 
 export async function listTrophies(saveId: string) {
   const save = await prisma.save.findUnique({ where: { id: saveId } })
