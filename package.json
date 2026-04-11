@@ -1,6 +1,7 @@
 {
   "name": "fc26-career-hub-api",
   "version": "1.0.0",
+  "type": "module",
   "scripts": {
     "postinstall": "prisma generate",
     "dev": "tsx watch src/server.ts",
