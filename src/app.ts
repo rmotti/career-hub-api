@@ -4,6 +4,8 @@ import swagger from '@fastify/swagger'
 import swaggerUi from '@fastify/swagger-ui'
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library'
 import { AppError } from './shared/utils/errors'
+import { requireAuth } from './shared/utils/auth-hooks'
+import { authRoutes } from './features/auth/auth.routes'
 import { clubsRoutes } from './features/clubs/clubs.routes'
 import { savesRoutes } from './features/saves/saves.routes'
 import { clubStintsRoutes } from './features/club-stints/club-stints.routes'
@@ -21,7 +23,10 @@ export const app = Fastify({
   },
 })
 
-app.register(cors, { origin: '*' })
+app.register(cors, {
+  origin: process.env.TRUSTED_ORIGINS?.split(',') ?? '*',
+  credentials: true,
+})
 
 app.register(swagger, {
   openapi: {
@@ -31,6 +36,7 @@ app.register(swagger, {
       version: '1.0.0',
     },
     tags: [
+      { name: 'Auth', description: 'Autenticação e sessão' },
       { name: 'Clubs', description: 'Lista de clubes disponíveis' },
       { name: 'Saves', description: 'Gerenciamento de saves/carreiras' },
       { name: 'Club Stints', description: 'Passagens por clubes dentro de um save' },
@@ -39,6 +45,16 @@ app.register(swagger, {
       { name: 'Transfers', description: 'Transferências de jogadores' },
       { name: 'Trophies', description: 'Troféus conquistados' },
     ],
+    components: {
+      securitySchemes: {
+        bearerAuth: {
+          type: 'http',
+          scheme: 'bearer',
+          description: 'Token de sessão retornado pelo login. Passe no header: Authorization: Bearer <token>',
+        },
+      },
+    },
+    security: [{ bearerAuth: [] }],
   },
 })
 
@@ -50,17 +66,25 @@ app.register(swaggerUi, {
   },
 })
 
-app.get('/', (_request, reply) => {
+app.get('/', { schema: { hide: true } }, (_request, reply) => {
   reply.redirect('/docs')
 })
 
-app.register(clubsRoutes, { prefix: '/api' })
-app.register(savesRoutes, { prefix: '/api' })
-app.register(clubStintsRoutes, { prefix: '/api' })
-app.register(playersRoutes, { prefix: '/api' })
-app.register(teamStatsRoutes, { prefix: '/api' })
-app.register(transfersRoutes, { prefix: '/api' })
-app.register(trophiesRoutes, { prefix: '/api' })
+// Rotas públicas de autenticação
+app.register(authRoutes, { prefix: '/api' })
+
+// Rotas protegidas — requerem sessão válida
+app.register(async (protectedRoutes) => {
+  protectedRoutes.addHook('preHandler', requireAuth())
+
+  protectedRoutes.register(clubsRoutes, { prefix: '/api' })
+  protectedRoutes.register(savesRoutes, { prefix: '/api' })
+  protectedRoutes.register(clubStintsRoutes, { prefix: '/api' })
+  protectedRoutes.register(playersRoutes, { prefix: '/api' })
+  protectedRoutes.register(teamStatsRoutes, { prefix: '/api' })
+  protectedRoutes.register(transfersRoutes, { prefix: '/api' })
+  protectedRoutes.register(trophiesRoutes, { prefix: '/api' })
+})
 
 app.setSchemaErrorFormatter((errors, _dataVar) => {
   const first = errors[0]

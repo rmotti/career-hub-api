@@ -1,8 +1,8 @@
 import { FastifyRequest, FastifyReply } from 'fastify'
 import * as savesService from './saves.service'
 
-export async function listSaves(_request: FastifyRequest, reply: FastifyReply) {
-  const saves = await savesService.listSaves()
+export async function listSaves(request: FastifyRequest, reply: FastifyReply) {
+  const saves = await savesService.listSaves(request.user!.id)
   return reply.send(saves)
 }
 
@@ -10,7 +10,7 @@ export async function getSave(
   request: FastifyRequest<{ Params: { saveId: string } }>,
   reply: FastifyReply
 ) {
-  const save = await savesService.getSaveById(request.params.saveId)
+  const save = await savesService.getSaveById(request.params.saveId, request.user!.id)
   return reply.send(save)
 }
 
@@ -18,7 +18,7 @@ export async function createSave(
   request: FastifyRequest<{ Body: { name: string; club: string; budget: number } }>,
   reply: FastifyReply
 ) {
-  const save = await savesService.createSave(request.body)
+  const save = await savesService.createSave({ ...request.body, userId: request.user!.id })
   return reply.status(201).send(save)
 }
 
@@ -34,7 +34,7 @@ export async function updateSave(
   }>,
   reply: FastifyReply
 ) {
-  const save = await savesService.updateSave(request.params.saveId, request.body)
+  const save = await savesService.updateSave(request.params.saveId, request.body, request.user!.id)
   return reply.send(save)
 }
 
@@ -42,6 +42,6 @@ export async function deleteSave(
   request: FastifyRequest<{ Params: { saveId: string } }>,
   reply: FastifyReply
 ) {
-  await savesService.deleteSave(request.params.saveId)
+  await savesService.deleteSave(request.params.saveId, request.user!.id)
   return reply.status(204).send()
 }

@@ -4,8 +4,9 @@ import { clubExists } from '../clubs/clubs.service'
 import { formatBalance } from '../../shared/utils/currency'
 import { PlayerStatus } from '@prisma/client'
 
-export async function listSaves() {
+export async function listSaves(userId: string) {
   const saves = await prisma.save.findMany({
+    where: { userId },
     include: {
       clubStints: {
         where: { isCurrent: true },
@@ -22,13 +23,14 @@ export async function listSaves() {
   }))
 }
 
-export async function getSaveById(saveId: string) {
+export async function getSaveById(saveId: string, userId: string) {
   const save = await prisma.save.findUnique({
     where: { id: saveId },
     include: { clubStints: true },
   })
 
   if (!save) throw new NotFoundError('Save não encontrado.')
+  if (save.userId !== userId) throw new NotFoundError('Save não encontrado.')
 
   const currentStint = save.clubStints.find((cs) => cs.isCurrent) ?? null
 
@@ -51,7 +53,7 @@ export async function getSaveById(saveId: string) {
   }
 }
 
-export async function createSave(data: { name: string; club: string; budget: number }) {
+export async function createSave(data: { name: string; club: string; budget: number; userId: string }) {
   if (!clubExists(data.club)) {
     throw new AppError(`Clube inválido: '${data.club}' não encontrado na lista de clubes disponíveis.`, 400)
   }
@@ -60,6 +62,7 @@ export async function createSave(data: { name: string; club: string; budget: num
     const newSave = await tx.save.create({
       data: {
         name: data.name,
+        userId: data.userId,
         currentYear: 2025,
         currentSeason: '2025/26',
         budget: data.budget,
@@ -86,7 +89,7 @@ export async function createSave(data: { name: string; club: string; budget: num
     return newSave
   })
 
-  return getSaveById(save.id)
+  return getSaveById(save.id, data.userId)
 }
 
 export async function updateSave(
@@ -96,7 +99,8 @@ export async function updateSave(
     currentSeason?: string
     budget?: number
     balance?: number
-  }
+  },
+  userId: string
 ) {
   const save = await prisma.save.findUnique({
     where: { id: saveId },
@@ -104,6 +108,7 @@ export async function updateSave(
   })
 
   if (!save) throw new NotFoundError('Save não encontrado.')
+  if (save.userId !== userId) throw new NotFoundError('Save não encontrado.')
 
   const seasonChanged = data.currentSeason && data.currentSeason !== save.currentSeason
 
@@ -238,12 +243,13 @@ export async function updateSave(
     await tx.save.update({ where: { id: saveId }, data })
   })
 
-  return getSaveById(saveId)
+  return getSaveById(saveId, userId)
 }
 
-export async function deleteSave(saveId: string) {
+export async function deleteSave(saveId: string, userId: string) {
   const save = await prisma.save.findUnique({ where: { id: saveId } })
   if (!save) throw new NotFoundError('Save não encontrado.')
+  if (save.userId !== userId) throw new NotFoundError('Save não encontrado.')
 
   await prisma.save.delete({ where: { id: saveId } })
 }
