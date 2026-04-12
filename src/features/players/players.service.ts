@@ -2,6 +2,13 @@ import { prisma } from '../../shared/lib/prisma.js'
 import { NotFoundError, AppError } from '../../shared/utils/errors.js'
 import { formatMarketValue, formatSalary } from '../../shared/utils/currency.js'
 import { Position, PlayerStatus } from '@prisma/client'
+import { cacheGet, cacheSet, cacheInvalidate, cacheInvalidatePattern } from '../../shared/utils/cache.js'
+
+const TTL = {
+  playersList: 60 * 60,        // 1h
+  playersActive: 60 * 30,      // 30min
+  player: 60 * 60,             // 1h
+}
 
 const POSITION_ORDER: Position[] = [
   'GOL', 'LD', 'LE', 'ZAG', 'VOL', 'MC', 'ME', 'MD', 'MEI', 'PE', 'PD', 'SA', 'ATA',
@@ -16,6 +23,28 @@ function formatPlayer<T extends { marketValue: number | null; salary: number | n
 }
 
 export async function listPlayers(saveId: string, activeOnly?: boolean, season?: string) {
+  let cacheKey: string
+  let ttl: number
+
+  if (activeOnly) {
+    cacheKey = season
+      ? `save:${saveId}:players:active:${season}`
+      : `save:${saveId}:players:active`
+    ttl = TTL.playersActive
+  } else {
+    cacheKey = `save:${saveId}:players`
+    ttl = TTL.playersList
+  }
+
+  const cached = await cacheGet<unknown[]>(cacheKey)
+  if (cached) return cached
+
+  const result = await fetchPlayers(saveId, activeOnly, season)
+  await cacheSet(cacheKey, result, ttl)
+  return result
+}
+
+async function fetchPlayers(saveId: string, activeOnly?: boolean, season?: string) {
   const save = await prisma.save.findUnique({
     where: { id: saveId },
     include: { clubStints: { where: { isCurrent: true } } },
@@ -109,6 +138,16 @@ export async function listPlayers(saveId: string, activeOnly?: boolean, season?:
 }
 
 export async function getPlayerById(saveId: string, playerId: string) {
+  const key = `save:${saveId}:player:${playerId}`
+  const cached = await cacheGet<object>(key)
+  if (cached) return cached
+
+  const result = await fetchPlayerById(saveId, playerId)
+  await cacheSet(key, result, TTL.player)
+  return result
+}
+
+async function fetchPlayerById(saveId: string, playerId: string) {
   const save = await prisma.save.findUnique({ where: { id: saveId } })
   if (!save) throw new NotFoundError('Save não encontrado.')
 
@@ -224,6 +263,8 @@ export async function createPlayer(
     return newPlayer
   })
 
+  await invalidatePlayersCache(saveId)
+
   return formatPlayer(player)
 }
 
@@ -278,6 +319,8 @@ export async function updatePlayer(
     }
   }
 
+  await invalidatePlayersCache(saveId, playerId)
+
   return formatPlayer(updatedPlayer)
 }
 
@@ -319,20 +362,39 @@ export async function updatePlayerStats(
 
   if (!stats) throw new NotFoundError('Estatísticas do jogador para a temporada atual não encontradas.')
 
-  return prisma.playerSeasonStats.update({
+  const result = await prisma.playerSeasonStats.update({
     where: { id: stats.id },
     data,
   })
+
+  await cacheInvalidate(
+    `save:${saveId}:player:${playerId}`,
+    `save:${saveId}:players:active`,
+  )
+  await cacheInvalidatePattern(`save:${saveId}:players:active:*`)
+
+  return result
 }
 
 export async function releasePlayer(saveId: string, playerId: string) {
   const player = await prisma.player.findFirst({ where: { id: playerId, saveId } })
   if (!player) throw new NotFoundError('Jogador não encontrado neste save.')
 
-  return prisma.player.update({
+  const result = await prisma.player.update({
     where: { id: playerId },
     data: { activeClubStintId: null },
   })
+
+  await invalidatePlayersCache(saveId, playerId)
+
+  return result
+}
+
+async function invalidatePlayersCache(saveId: string, playerId?: string) {
+  const keys = [`save:${saveId}:players`, `save:${saveId}:players:active`]
+  if (playerId) keys.push(`save:${saveId}:player:${playerId}`)
+  await cacheInvalidate(...keys)
+  await cacheInvalidatePattern(`save:${saveId}:players:active:*`)
 }
 
 async function checkShirtNumberConflict(

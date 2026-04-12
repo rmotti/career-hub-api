@@ -11,5 +11,11 @@ services:
     volumes:
       - fc26_data:/var/lib/postgresql/data
 
+  redis:
+    image: redis:7-alpine
+    container_name: fc26_redis
+    ports:
+      - "6380:6379"
+
 volumes:
   fc26_data:

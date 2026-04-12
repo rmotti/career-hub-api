@@ -24,7 +24,7 @@ export const app = Fastify({
 })
 
 app.register(cors, {
-  origin: process.env.TRUSTED_ORIGINS?.split(',') ?? '*',
+  origin: process.env.TRUSTED_ORIGINS?.split(',') ?? (process.env.NODE_ENV === 'production' ? false : true),
   credentials: true,
 })
 

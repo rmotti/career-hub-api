@@ -40,6 +40,16 @@ export const auth = betterAuth({
   },
 
   trustedOrigins: process.env.TRUSTED_ORIGINS?.split(',') ?? [],
+
+  ...(process.env.NODE_ENV === 'production' && {
+    advanced: {
+      defaultCookieAttributes: {
+        sameSite: 'none',
+        secure: true,
+        partitioned: true,
+      },
+    },
+  }),
 })
 
 export type Auth = typeof auth

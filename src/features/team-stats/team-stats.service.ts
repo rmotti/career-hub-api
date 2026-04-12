@@ -1,8 +1,24 @@
 import { prisma } from '../../shared/lib/prisma.js'
 import { AppError, NotFoundError } from '../../shared/utils/errors.js'
 import { CupResult } from '@prisma/client'
+import { cacheGet, cacheSet, cacheInvalidate, cacheInvalidatePattern } from '../../shared/utils/cache.js'
+
+const TTL_TEAM_STATS = 60 * 60 // 1h
 
 export async function listTeamStats(saveId: string, seasonFilter?: string) {
+  const key = seasonFilter
+    ? `save:${saveId}:team-stats:${seasonFilter}`
+    : `save:${saveId}:team-stats`
+
+  const cached = await cacheGet<unknown[]>(key)
+  if (cached) return cached
+
+  const result = await fetchTeamStats(saveId, seasonFilter)
+  await cacheSet(key, result, TTL_TEAM_STATS)
+  return result
+}
+
+async function fetchTeamStats(saveId: string, seasonFilter?: string) {
   const save = await prisma.save.findUnique({
     where: { id: saveId },
     include: { clubStints: { where: { isCurrent: true } } },
@@ -71,5 +87,10 @@ export async function updateTeamStats(
 
   if (!stats) throw new NotFoundError('Estatísticas não encontradas.')
 
-  return prisma.teamSeasonStats.update({ where: { id: statsId }, data })
+  const result = await prisma.teamSeasonStats.update({ where: { id: statsId }, data })
+
+  await cacheInvalidate(`save:${saveId}:team-stats`)
+  await cacheInvalidatePattern(`save:${saveId}:team-stats:*`)
+
+  return result
 }
