@@ -3,8 +3,18 @@ import { AppError, NotFoundError } from '../../shared/utils/errors.js'
 import { clubExists } from '../clubs/clubs.service.js'
 import { formatBalance } from '../../shared/utils/currency.js'
 import { PlayerStatus } from '@prisma/client'
+import { cacheGet, cacheSet, cacheInvalidate, cacheInvalidatePattern } from '../../shared/utils/cache.js'
+
+const TTL = {
+  savesList: 60 * 15,   // 15min
+  save: 60 * 30,        // 30min
+}
 
 export async function listSaves(userId: string) {
+  const key = `user:${userId}:saves`
+  const cached = await cacheGet<ReturnType<typeof mapSaves>>(key)
+  if (cached) return cached
+
   const saves = await prisma.save.findMany({
     where: { userId },
     include: {
@@ -15,6 +25,12 @@ export async function listSaves(userId: string) {
     orderBy: { createdAt: 'desc' },
   })
 
+  const result = mapSaves(saves)
+  await cacheSet(key, result, TTL.savesList)
+  return result
+}
+
+function mapSaves(saves: Awaited<ReturnType<typeof prisma.save.findMany<{ include: { clubStints: true } }>>>) {
   return saves.map(({ clubStints, ...rest }) => ({
     ...rest,
     budgetFormatted: formatBalance(rest.budget),
@@ -24,6 +40,16 @@ export async function listSaves(userId: string) {
 }
 
 export async function getSaveById(saveId: string, userId: string) {
+  const key = `save:${saveId}`
+  const cached = await cacheGet<object>(key)
+  if (cached) return cached
+
+  const result = await fetchSaveById(saveId, userId)
+  await cacheSet(key, result, TTL.save)
+  return result
+}
+
+async function fetchSaveById(saveId: string, userId: string) {
   const save = await prisma.save.findUnique({
     where: { id: saveId },
     include: { clubStints: true },
@@ -88,6 +114,8 @@ export async function createSave(data: { name: string; club: string; budget: num
 
     return newSave
   })
+
+  await cacheInvalidate(`user:${data.userId}:saves`)
 
   return getSaveById(save.id, data.userId)
 }
@@ -243,6 +271,12 @@ export async function updateSave(
     await tx.save.update({ where: { id: saveId }, data })
   })
 
+  // Advance season invalida tudo do save — players envelhecem, stats mudam, troféus podem ter sido criados
+  if (seasonChanged) {
+    await cacheInvalidatePattern(`save:${saveId}:*`)
+  }
+  await cacheInvalidate(`save:${saveId}`, `user:${userId}:saves`)
+
   return getSaveById(saveId, userId)
 }
 
@@ -252,4 +286,6 @@ export async function deleteSave(saveId: string, userId: string) {
   if (save.userId !== userId) throw new NotFoundError('Save não encontrado.')
 
   await prisma.save.delete({ where: { id: saveId } })
+  await cacheInvalidatePattern(`save:${saveId}:*`)
+  await cacheInvalidate(`save:${saveId}`, `user:${userId}:saves`)
 }
