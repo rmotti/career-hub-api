@@ -15,14 +15,15 @@ export async function listTrophies(saveId: string) {
 }
 
 async function fetchTrophies(saveId: string) {
-  const save = await prisma.save.findUnique({ where: { id: saveId } })
+  const [save, trophies] = await Promise.all([
+    prisma.save.findUnique({ where: { id: saveId }, select: { id: true } }),
+    prisma.trophy.findMany({
+      where: { clubStint: { saveId } },
+      include: { clubStint: { select: { club: true } } },
+      orderBy: { year: 'desc' },
+    }),
+  ])
   if (!save) throw new NotFoundError('Save não encontrado.')
-
-  const trophies = await prisma.trophy.findMany({
-    where: { clubStint: { saveId } },
-    include: { clubStint: { select: { club: true } } },
-    orderBy: { year: 'desc' },
-  })
 
   return trophies.map((t: (typeof trophies)[number]) => ({
     id: t.id,

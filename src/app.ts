@@ -1,5 +1,6 @@
 import Fastify from 'fastify'
 import cors from '@fastify/cors'
+import compress from '@fastify/compress'
 import swagger from '@fastify/swagger'
 import swaggerUi from '@fastify/swagger-ui'
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library'
@@ -26,6 +27,12 @@ export const app = Fastify({
 app.register(cors, {
   origin: process.env.TRUSTED_ORIGINS?.split(',') ?? (process.env.NODE_ENV === 'production' ? false : true),
   credentials: true,
+})
+
+app.register(compress, {
+  global: true,
+  threshold: 1024,
+  encodings: ['gzip', 'br'],
 })
 
 app.register(swagger, {

@@ -2,7 +2,8 @@ import { prisma } from '../../shared/lib/prisma.js'
 import { NotFoundError, AppError } from '../../shared/utils/errors.js'
 import { formatMarketValue, formatSalary } from '../../shared/utils/currency.js'
 import { Position, PlayerStatus } from '@prisma/client'
-import { cacheGet, cacheSet, cacheInvalidate, cacheInvalidatePattern } from '../../shared/utils/cache.js'
+import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library'
+import { cacheGet, cacheSet, cacheInvalidate } from '../../shared/utils/cache.js'
 
 const TTL = {
   playersList: 60 * 60,        // 1h
@@ -58,32 +59,42 @@ async function fetchPlayers(saveId: string, activeOnly?: boolean, season?: strin
     const isCurrentSeason = !season || season === save.currentSeason
 
     if (isCurrentSeason) {
-      const players = await prisma.player.findMany({
-        where: { saveId, activeClubStintId: currentStint.id },
-        include: {
-          seasonStats: {
-            where: { clubStintId: currentStint.id, season: save.currentSeason },
-          },
-          ovrHistory: {
-            orderBy: { createdAt: 'desc' },
-            take: 1,
-          },
-        },
+      // Buscar players ativos e season stats em paralelo — ambos precisam apenas de currentStint.id
+      const [activePlayers, seasonStatsRows] = await Promise.all([
+        prisma.player.findMany({
+          where: { saveId, activeClubStintId: currentStint.id },
+        }),
+        prisma.playerSeasonStats.findMany({
+          where: { clubStintId: currentStint.id, season: save.currentSeason },
+        }),
+      ])
+      const playerIds = activePlayers.map(p => p.id)
+
+      const ovrHistoryRows = await prisma.playerOvrHistory.findMany({
+        where: { playerId: { in: playerIds } },
+        orderBy: { createdAt: 'desc' },
       })
 
-      const sorted = [...players].sort(
+      // Última entrada de OVR por jogador (já ordenado por createdAt desc)
+      const lastOvrMap = new Map<string, typeof ovrHistoryRows[number]>()
+      for (const h of ovrHistoryRows) {
+        if (!lastOvrMap.has(h.playerId)) lastOvrMap.set(h.playerId, h)
+      }
+
+      const statsMap = new Map(seasonStatsRows.map(s => [s.playerId, s]))
+
+      const sorted = [...activePlayers].sort(
         (a, b) => POSITION_ORDER.indexOf(a.position) - POSITION_ORDER.indexOf(b.position)
       )
 
       return sorted.map((p) => {
-        const s = p.seasonStats[0] ?? null
-        const lastHistory = p.ovrHistory[0] ?? null
-        const { seasonStats: _, ovrHistory: __, ...rest } = p
+        const s = statsMap.get(p.id) ?? null
+        const lastHistory = lastOvrMap.get(p.id) ?? null
         const stats = s
           ? { ...s, goalContributions: s.goals + s.assists }
           : { goals: 0, assists: 0, matches: 0, yellowCards: 0, redCards: 0, cleanSheets: 0, goalContributions: 0 }
         return {
-          ...formatPlayer(rest),
+          ...formatPlayer(p),
           currentSeasonStats: stats,
           ovrDelta: lastHistory !== null ? p.ovr - lastHistory.ovr : null,
           marketValueDelta: (lastHistory !== null && p.marketValue !== null && lastHistory.marketValue !== null)
@@ -111,28 +122,42 @@ async function fetchPlayers(saveId: string, activeOnly?: boolean, season?: strin
     }))
   }
 
-  const players = await prisma.player.findMany({
-    where: { saveId },
-    include: { seasonStats: true },
-    orderBy: { createdAt: 'asc' },
-  })
+  const [players, statsTotals] = await Promise.all([
+    prisma.player.findMany({
+      where: { saveId },
+      orderBy: { createdAt: 'asc' },
+    }),
+    prisma.playerSeasonStats.groupBy({
+      by: ['playerId'],
+      where: { player: { saveId } },
+      _sum: {
+        goals: true,
+        assists: true,
+        matches: true,
+        yellowCards: true,
+        redCards: true,
+        cleanSheets: true,
+      },
+    }),
+  ])
+
+  const totalsMap = new Map(statsTotals.map((s) => [s.playerId, s._sum]))
 
   return players.map((p) => {
-    const totals = p.seasonStats.reduce(
-      (acc, s) => ({
-        goals: acc.goals + s.goals,
-        assists: acc.assists + s.assists,
-        matches: acc.matches + s.matches,
-        yellowCards: acc.yellowCards + s.yellowCards,
-        redCards: acc.redCards + s.redCards,
-        cleanSheets: acc.cleanSheets + s.cleanSheets,
-      }),
-      { goals: 0, assists: 0, matches: 0, yellowCards: 0, redCards: 0, cleanSheets: 0 }
-    )
-    const { seasonStats: _, ...rest } = p
+    const t = totalsMap.get(p.id)
+    const goals = t?.goals ?? 0
+    const assists = t?.assists ?? 0
     return {
-      ...formatPlayer(rest),
-      totalStats: { ...totals, goalContributions: totals.goals + totals.assists },
+      ...formatPlayer(p),
+      totalStats: {
+        goals,
+        assists,
+        matches: t?.matches ?? 0,
+        yellowCards: t?.yellowCards ?? 0,
+        redCards: t?.redCards ?? 0,
+        cleanSheets: t?.cleanSheets ?? 0,
+        goalContributions: goals + assists,
+      },
     }
   })
 }
@@ -148,24 +173,33 @@ export async function getPlayerById(saveId: string, playerId: string) {
 }
 
 async function fetchPlayerById(saveId: string, playerId: string) {
-  const save = await prisma.save.findUnique({ where: { id: saveId } })
+  const [save, player] = await Promise.all([
+    prisma.save.findUnique({ where: { id: saveId } }),
+    prisma.player.findFirst({
+      where: { id: playerId, saveId },
+      include: {
+        seasonStats: {
+          select: {
+            season: true,
+            goals: true,
+            assists: true,
+            matches: true,
+            yellowCards: true,
+            redCards: true,
+            cleanSheets: true,
+            clubStint: { select: { club: true } },
+          },
+        },
+        ovrHistory: {
+          orderBy: { createdAt: 'asc' },
+          take: 20,
+          select: { season: true, ovr: true, marketValue: true },
+        },
+      },
+    }),
+  ])
+
   if (!save) throw new NotFoundError('Save não encontrado.')
-
-  const playerExists = await prisma.player.findUnique({ where: { id: playerId } })
-  if (!playerExists) throw new NotFoundError('Jogador não encontrado.')
-
-  const player = await prisma.player.findFirst({
-    where: { id: playerId, saveId },
-    include: {
-      seasonStats: {
-        include: { clubStint: true },
-      },
-      ovrHistory: {
-        orderBy: { createdAt: 'asc' },
-      },
-    },
-  })
-
   if (!player) throw new NotFoundError('Jogador não encontrado neste save.')
 
   const totals = player.seasonStats.reduce(
@@ -285,7 +319,15 @@ export async function updatePlayer(
     matches?: number
   }
 ) {
-  const player = await prisma.player.findFirst({ where: { id: playerId, saveId } })
+  const { matches, ...playerFields } = data
+
+  const [player, saveWithStint] = await Promise.all([
+    prisma.player.findFirst({ where: { id: playerId, saveId } }),
+    matches !== undefined
+      ? prisma.save.findUnique({ where: { id: saveId }, include: { clubStints: { where: { isCurrent: true } } } })
+      : Promise.resolve(null),
+  ])
+
   if (!player) throw new NotFoundError('Jogador não encontrado neste save.')
 
   if (data.potential !== undefined && (data.potential < 40 || data.potential > 99)) {
@@ -299,24 +341,22 @@ export async function updatePlayer(
     await checkShirtNumberConflict(saveId, data.shirtNumber, playerId)
   }
 
-  const { matches, ...playerFields } = data
-
   const updatedPlayer = await prisma.player.update({ where: { id: playerId }, data: playerFields })
 
-  if (matches !== undefined) {
-    const save = await prisma.save.findUnique({
-      where: { id: saveId },
-      include: { clubStints: { where: { isCurrent: true } } },
+  if (matches !== undefined && saveWithStint?.clubStints[0]) {
+    const currentStint = saveWithStint.clubStints[0]
+    await prisma.playerSeasonStats.update({
+      where: {
+        playerId_clubStintId_season: {
+          playerId,
+          clubStintId: currentStint.id,
+          season: saveWithStint.currentSeason,
+        },
+      },
+      data: { matches },
+    }).catch((e) => {
+      if (!(e instanceof PrismaClientKnownRequestError && e.code === 'P2025')) throw e
     })
-    if (save?.clubStints[0]) {
-      const currentStint = save.clubStints[0]
-      const stats = await prisma.playerSeasonStats.findFirst({
-        where: { playerId, clubStintId: currentStint.id, season: save.currentSeason },
-      })
-      if (stats) {
-        await prisma.playerSeasonStats.update({ where: { id: stats.id }, data: { matches } })
-      }
-    }
   }
 
   await invalidatePlayersCache(saveId, playerId)
@@ -336,13 +376,14 @@ export async function updatePlayerStats(
     cleanSheets?: number
   }
 ) {
-  const save = await prisma.save.findUnique({
-    where: { id: saveId },
-    include: { clubStints: { where: { isCurrent: true } } },
-  })
+  const [save, player] = await Promise.all([
+    prisma.save.findUnique({
+      where: { id: saveId },
+      include: { clubStints: { where: { isCurrent: true } } },
+    }),
+    prisma.player.findFirst({ where: { id: playerId, saveId } }),
+  ])
   if (!save) throw new NotFoundError('Save não encontrado.')
-
-  const player = await prisma.player.findFirst({ where: { id: playerId, saveId } })
   if (!player) throw new NotFoundError('Jogador não encontrado neste save.')
 
   const currentStint = save.clubStints[0]
@@ -352,28 +393,46 @@ export async function updatePlayerStats(
     throw new AppError(`O jogador '${player.name}' não está no elenco ativo desta temporada.`, 400)
   }
 
-  const stats = await prisma.playerSeasonStats.findFirst({
-    where: {
-      playerId,
-      clubStintId: currentStint.id,
-      season: save.currentSeason,
-    },
-  })
-
-  if (!stats) throw new NotFoundError('Estatísticas do jogador para a temporada atual não encontradas.')
-
-  const result = await prisma.playerSeasonStats.update({
-    where: { id: stats.id },
-    data,
-  })
+  let updated
+  try {
+    updated = await prisma.playerSeasonStats.update({
+      where: {
+        playerId_clubStintId_season: {
+          playerId,
+          clubStintId: currentStint.id,
+          season: save.currentSeason,
+        },
+      },
+      data,
+      select: {
+        id: true,
+        playerId: true,
+        season: true,
+        goals: true,
+        assists: true,
+        matches: true,
+        yellowCards: true,
+        redCards: true,
+        cleanSheets: true,
+      },
+    })
+  } catch (e) {
+    if (e instanceof PrismaClientKnownRequestError && e.code === 'P2025') {
+      throw new NotFoundError('Estatísticas do jogador para a temporada atual não encontradas.')
+    }
+    throw e
+  }
 
   await cacheInvalidate(
     `save:${saveId}:player:${playerId}`,
     `save:${saveId}:players:active`,
+    `save:${saveId}:players:active:${updated.season}`,
   )
-  await cacheInvalidatePattern(`save:${saveId}:players:active:*`)
 
-  return result
+  return {
+    ...updated,
+    goalContributions: updated.goals + updated.assists,
+  }
 }
 
 export async function releasePlayer(saveId: string, playerId: string) {
@@ -394,7 +453,6 @@ async function invalidatePlayersCache(saveId: string, playerId?: string) {
   const keys = [`save:${saveId}:players`, `save:${saveId}:players:active`]
   if (playerId) keys.push(`save:${saveId}:player:${playerId}`)
   await cacheInvalidate(...keys)
-  await cacheInvalidatePattern(`save:${saveId}:players:active:*`)
 }
 
 async function checkShirtNumberConflict(

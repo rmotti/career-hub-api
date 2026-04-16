@@ -1,28 +1,36 @@
 import { prisma } from '../../shared/lib/prisma.js'
 import { AppError, NotFoundError } from '../../shared/utils/errors.js'
 import { clubExists } from '../clubs/clubs.service.js'
+import { cacheGet, cacheSet, cacheInvalidate } from '../../shared/utils/cache.js'
+
+const TTL_CLUB_STINTS = 60 * 60 // 1h
 
 export async function listClubStints(saveId: string) {
-  const save = await prisma.save.findUnique({ where: { id: saveId } })
-  if (!save) throw new NotFoundError('Save não encontrado.')
+  const key = `save:${saveId}:club-stints`
+  const cached = await cacheGet<object[]>(key)
+  if (cached) return cached
 
-  return prisma.clubStint.findMany({
+  const stints = await prisma.clubStint.findMany({
     where: { saveId },
     orderBy: { createdAt: 'asc' },
   })
+
+  // Verificar existência do save somente quando não há stints (evita query extra no caminho feliz)
+  if (stints.length === 0) {
+    const save = await prisma.save.findUnique({ where: { id: saveId }, select: { id: true } })
+    if (!save) throw new NotFoundError('Save não encontrado.')
+  }
+
+  await cacheSet(key, stints, TTL_CLUB_STINTS)
+  return stints
 }
 
 export async function getCurrentClubStint(saveId: string) {
-  const save = await prisma.save.findUnique({ where: { id: saveId } })
-  if (!save) throw new NotFoundError('Save não encontrado.')
-
-  const stint = await prisma.clubStint.findFirst({
-    where: { saveId, isCurrent: true },
-  })
-
-  if (!stint) throw new NotFoundError('Nenhum clube ativo encontrado para este save.')
-
-  return stint
+  // Reutiliza o cache da lista para evitar query extra
+  const stints = await listClubStints(saveId)
+  const current = (stints as Array<{ isCurrent: boolean }>).find((s) => s.isCurrent)
+  if (!current) throw new NotFoundError('Nenhum clube ativo encontrado para este save.')
+  return current
 }
 
 export async function createClubStint(saveId: string, data: { club: string }) {
@@ -72,6 +80,8 @@ export async function createClubStint(saveId: string, data: { club: string }) {
     return stint
   })
 
+  await cacheInvalidate(`save:${saveId}:club-stints`)
+
   return newStint
 }
 
@@ -90,8 +100,12 @@ export async function updateClubStint(
     throw new AppError(`Clube inválido: '${data.club}' não encontrado na lista de clubes disponíveis.`, 400)
   }
 
-  return prisma.clubStint.update({
+  const result = await prisma.clubStint.update({
     where: { id: stintId },
     data,
   })
+
+  await cacheInvalidate(`save:${saveId}:club-stints`)
+
+  return result
 }

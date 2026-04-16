@@ -1,6 +1,7 @@
 import { FastifyRequest, FastifyReply } from 'fastify'
 import { auth } from '../lib/auth.js'
 import { AppError } from './errors.js'
+import { cacheGet, cacheSet, cacheInvalidate } from './cache.js'
 
 type UserRole = 'ADMIN' | 'USER'
 type UserPlan = 'FREE' | 'PRO' | 'PREMIUM'
@@ -11,13 +12,35 @@ const PLAN_HIERARCHY: Record<UserPlan, number> = {
   PREMIUM: 2,
 }
 
+const SESSION_TTL = 5 * 60 // 5 minutos
+
 async function getSession(request: FastifyRequest) {
+  const token = (request.headers.authorization ?? '').replace('Bearer ', '').trim()
+
+  if (token) {
+    const cacheKey = `session:${token}`
+    const cached = await cacheGet<object>(cacheKey)
+    if (cached) return cached as Awaited<ReturnType<typeof auth.api.getSession>>
+
+    const url = new URL(request.url, `${request.protocol}://${request.hostname}`)
+    const session = await auth.api.getSession({
+      headers: request.headers as HeadersInit,
+      query: Object.fromEntries(url.searchParams),
+    })
+
+    if (session) await cacheSet(cacheKey, session, SESSION_TTL)
+    return session
+  }
+
   const url = new URL(request.url, `${request.protocol}://${request.hostname}`)
-  const session = await auth.api.getSession({
+  return auth.api.getSession({
     headers: request.headers as HeadersInit,
     query: Object.fromEntries(url.searchParams),
   })
-  return session
+}
+
+export async function invalidateSessionCache(token: string) {
+  if (token) await cacheInvalidate(`session:${token}`)
 }
 
 export function requireAuth() {

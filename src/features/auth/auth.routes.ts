@@ -1,5 +1,6 @@
 import { FastifyInstance } from 'fastify'
 import { auth } from '../../shared/lib/auth.js'
+import { invalidateSessionCache } from '../../shared/utils/auth-hooks.js'
 
 function toBetterAuthRequest(request: {
   url: string
@@ -165,7 +166,9 @@ export async function authRoutes(app: FastifyInstance) {
       },
     },
   }, async (request, reply) => {
+    const token = ((request.headers as Record<string, string>).authorization ?? '').replace('Bearer ', '').trim()
     const response = await auth.handler(toBetterAuthRequest(request as any))
+    await invalidateSessionCache(token)
     if (response.status >= 500) return reply.status(200).send({ success: true })
     reply.status(response.status)
     response.headers.forEach((value, key) => reply.header(key, value))

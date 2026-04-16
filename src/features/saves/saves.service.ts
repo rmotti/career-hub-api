@@ -2,7 +2,7 @@ import { prisma } from '../../shared/lib/prisma.js'
 import { AppError, NotFoundError } from '../../shared/utils/errors.js'
 import { clubExists } from '../clubs/clubs.service.js'
 import { formatBalance } from '../../shared/utils/currency.js'
-import { PlayerStatus } from '@prisma/client'
+import { PlayerStatus, type Save } from '@prisma/client'
 import { cacheGet, cacheSet, cacheInvalidate, cacheInvalidatePattern } from '../../shared/utils/cache.js'
 
 const TTL = {
@@ -84,7 +84,7 @@ export async function createSave(data: { name: string; club: string; budget: num
     throw new AppError(`Clube inválido: '${data.club}' não encontrado na lista de clubes disponíveis.`, 400)
   }
 
-  const save = await prisma.$transaction(async (tx) => {
+  const { newSave, clubStint } = await prisma.$transaction(async (tx) => {
     const newSave = await tx.save.create({
       data: {
         name: data.name,
@@ -112,12 +112,19 @@ export async function createSave(data: { name: string; club: string; budget: num
       },
     })
 
-    return newSave
+    return { newSave, clubStint }
   })
 
   await cacheInvalidate(`user:${data.userId}:saves`)
 
-  return getSaveById(save.id, data.userId)
+  return {
+    ...newSave,
+    budgetFormatted: formatBalance(newSave.budget),
+    balanceFormatted: formatBalance(newSave.balance),
+    currentClubStint: clubStint,
+    clubStints: [clubStint],
+    availableSeasons: ['2025/26'],
+  }
 }
 
 export async function updateSave(
@@ -132,13 +139,25 @@ export async function updateSave(
 ) {
   const save = await prisma.save.findUnique({
     where: { id: saveId },
-    include: { clubStints: { where: { isCurrent: true } } },
+    include: {
+      clubStints: {
+        where: { isCurrent: true },
+        include: {
+          teamSeasonStats: {
+            select: { season: true },
+            orderBy: { createdAt: 'asc' },
+          },
+        },
+      },
+    },
   })
 
   if (!save) throw new NotFoundError('Save não encontrado.')
   if (save.userId !== userId) throw new NotFoundError('Save não encontrado.')
 
   const seasonChanged = data.currentSeason && data.currentSeason !== save.currentSeason
+
+  let txUpdatedSave: Save | null = null
 
   await prisma.$transaction(async (tx) => {
     if (seasonChanged && save.clubStints[0]) {
@@ -151,42 +170,27 @@ export async function updateSave(
       if (endingStats) {
         // Always use the OLD year (the year of the season that just ended)
         const trophyYear = save.currentYear
+        const leagueTrophyName = `${currentStint.club} — Campeão da Liga ${save.currentSeason}`
+        const euTrophyName = `${currentStint.club} — Campeão Europeu ${save.currentSeason}`
+        const cupTrophyName = `${currentStint.club} — Campeão da Copa Nacional ${save.currentSeason}`
 
-        if (endingStats.leaguePosition === 1) {
-          const leagueTrophyName = `${currentStint.club} — Campeão da Liga ${save.currentSeason}`
-          const exists = await tx.trophy.findFirst({
-            where: { clubStintId: currentStint.id, name: leagueTrophyName },
-          })
-          if (!exists) {
-            await tx.trophy.create({
-              data: { clubStintId: currentStint.id, name: leagueTrophyName, year: trophyYear },
-            })
-          }
-        }
-
-        if (endingStats.europeanCupResult === 'Campeao') {
-          const euTrophyName = `${currentStint.club} — Campeão Europeu ${save.currentSeason}`
-          const exists = await tx.trophy.findFirst({
-            where: { clubStintId: currentStint.id, name: euTrophyName },
-          })
-          if (!exists) {
-            await tx.trophy.create({
-              data: { clubStintId: currentStint.id, name: euTrophyName, year: trophyYear },
-            })
-          }
-        }
-
-        if (endingStats.nationalCupResult === 'Campeao') {
-          const cupTrophyName = `${currentStint.club} — Campeão da Copa Nacional ${save.currentSeason}`
-          const exists = await tx.trophy.findFirst({
-            where: { clubStintId: currentStint.id, name: cupTrophyName },
-          })
-          if (!exists) {
-            await tx.trophy.create({
-              data: { clubStintId: currentStint.id, name: cupTrophyName, year: trophyYear },
-            })
-          }
-        }
+        await Promise.all([
+          endingStats.leaguePosition === 1 && tx.trophy.upsert({
+            where: { clubStintId_name: { clubStintId: currentStint.id, name: leagueTrophyName } },
+            create: { clubStintId: currentStint.id, name: leagueTrophyName, year: trophyYear },
+            update: {},
+          }),
+          endingStats.europeanCupResult === 'Campeao' && tx.trophy.upsert({
+            where: { clubStintId_name: { clubStintId: currentStint.id, name: euTrophyName } },
+            create: { clubStintId: currentStint.id, name: euTrophyName, year: trophyYear },
+            update: {},
+          }),
+          endingStats.nationalCupResult === 'Campeao' && tx.trophy.upsert({
+            where: { clubStintId_name: { clubStintId: currentStint.id, name: cupTrophyName } },
+            create: { clubStintId: currentStint.id, name: cupTrophyName, year: trophyYear },
+            update: {},
+          }),
+        ].filter(Boolean))
       }
 
       const activePlayers = await tx.player.findMany({
@@ -194,20 +198,15 @@ export async function updateSave(
       })
 
       // T3 — Step 1: snapshot OVR and marketValue before the new season starts (skip if already exists)
-      const existingSnapshots = await tx.playerOvrHistory.findMany({
-        where: { season: save.currentSeason, playerId: { in: activePlayers.map((p) => p.id) } },
-        select: { playerId: true },
-      })
-      const snappedPlayerIds = new Set(existingSnapshots.map((s) => s.playerId))
-      const newSnapshots = activePlayers.filter((p) => !snappedPlayerIds.has(p.id))
-      if (newSnapshots.length > 0) {
+      if (activePlayers.length > 0) {
         await tx.playerOvrHistory.createMany({
-          data: newSnapshots.map((p) => ({
+          data: activePlayers.map((p) => ({
             playerId: p.id,
             season: save.currentSeason,
             ovr: p.ovr,
             marketValue: p.marketValue,
           })),
+          skipDuplicates: true,
         })
       }
 
@@ -220,46 +219,41 @@ export async function updateSave(
       // Step 3: save update happens below via tx.save.update
 
       // Step 4: new TeamSeasonStats for the new season (skip if already exists)
-      const existingTeamStats = await tx.teamSeasonStats.findFirst({
-        where: { clubStintId: currentStint.id, season: data.currentSeason! },
+      await tx.teamSeasonStats.upsert({
+        where: { clubStintId_season: { clubStintId: currentStint.id, season: data.currentSeason! } },
+        create: { clubStintId: currentStint.id, season: data.currentSeason! },
+        update: {},
       })
-      if (!existingTeamStats) {
-        await tx.teamSeasonStats.create({
-          data: { clubStintId: currentStint.id, season: data.currentSeason! },
-        })
-      }
 
       // Step 5: new PlayerSeasonStats for each active player (skip if already exists)
-      const existingPlayerStats = await tx.playerSeasonStats.findMany({
-        where: { clubStintId: currentStint.id, season: data.currentSeason!, playerId: { in: activePlayers.map((p) => p.id) } },
-        select: { playerId: true },
-      })
-      const existingPlayerIds = new Set(existingPlayerStats.map((s) => s.playerId))
-      for (const player of activePlayers) {
-        if (!existingPlayerIds.has(player.id)) {
-          await tx.playerSeasonStats.create({
-            data: { playerId: player.id, clubStintId: currentStint.id, season: data.currentSeason! },
-          })
-        }
+      if (activePlayers.length > 0) {
+        await tx.playerSeasonStats.createMany({
+          data: activePlayers.map((p) => ({
+            playerId: p.id,
+            clubStintId: currentStint.id,
+            season: data.currentSeason!,
+          })),
+          skipDuplicates: true,
+        })
       }
 
       // Step 6 (C5) — reactivate loaned players returning from loan
       const loanedPlayers = await tx.player.findMany({
         where: { saveId, status: PlayerStatus.Loan, activeClubStintId: null },
       })
-      for (const player of loanedPlayers) {
-        await tx.player.update({
-          where: { id: player.id },
+      if (loanedPlayers.length > 0) {
+        await tx.player.updateMany({
+          where: { id: { in: loanedPlayers.map((p) => p.id) } },
           data: { activeClubStintId: currentStint.id, status: PlayerStatus.Role },
         })
-        const loanedStatsExist = await tx.playerSeasonStats.findFirst({
-          where: { playerId: player.id, clubStintId: currentStint.id, season: data.currentSeason! },
+        await tx.playerSeasonStats.createMany({
+          data: loanedPlayers.map((p) => ({
+            playerId: p.id,
+            clubStintId: currentStint.id,
+            season: data.currentSeason!,
+          })),
+          skipDuplicates: true,
         })
-        if (!loanedStatsExist) {
-          await tx.playerSeasonStats.create({
-            data: { playerId: player.id, clubStintId: currentStint.id, season: data.currentSeason! },
-          })
-        }
       }
 
       // C2 — reset balance to new budget when season changes
@@ -268,7 +262,7 @@ export async function updateSave(
       }
     }
 
-    await tx.save.update({ where: { id: saveId }, data })
+    txUpdatedSave = await tx.save.update({ where: { id: saveId }, data })
   })
 
   // Advance season invalida tudo do save — players envelhecem, stats mudam, troféus podem ter sido criados
@@ -277,7 +271,32 @@ export async function updateSave(
   }
   await cacheInvalidate(`save:${saveId}`, `user:${userId}:saves`)
 
-  return getSaveById(saveId, userId)
+  // Construir resposta inline — evita re-fetch do save (já temos os dados) e faz apenas
+  // 0 queries extras para availableSeasons, reaproveitando o include inicial
+  const updatedSave = txUpdatedSave!
+  const currentStint = save.clubStints[0] ?? null
+  const availableSeasons = seasonChanged
+    ? [
+        ...(currentStint?.teamSeasonStats.map((s) => s.season) ?? []),
+        data.currentSeason!,
+      ]
+    : currentStint?.teamSeasonStats.map((s) => s.season) ?? []
+
+  return {
+    id: updatedSave.id,
+    userId: updatedSave.userId,
+    name: updatedSave.name,
+    currentYear: updatedSave.currentYear,
+    currentSeason: updatedSave.currentSeason,
+    budget: updatedSave.budget,
+    balance: updatedSave.balance,
+    createdAt: updatedSave.createdAt,
+    updatedAt: updatedSave.updatedAt,
+    budgetFormatted: formatBalance(updatedSave.budget),
+    balanceFormatted: formatBalance(updatedSave.balance),
+    currentClubStint: currentStint,
+    availableSeasons,
+  }
 }
 
 export async function deleteSave(saveId: string, userId: string) {

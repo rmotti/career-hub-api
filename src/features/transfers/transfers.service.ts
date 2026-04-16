@@ -2,6 +2,9 @@ import { prisma } from '../../shared/lib/prisma.js'
 import { AppError, NotFoundError } from '../../shared/utils/errors.js'
 import { formatBalance, formatMarketValue } from '../../shared/utils/currency.js'
 import { TransferType, Position, PlayerStatus } from '@prisma/client'
+import { cacheGet, cacheSet, cacheInvalidate } from '../../shared/utils/cache.js'
+
+const TTL_TRANSFERS = 60 * 30 // 30 min
 
 const SEASON_PATTERN = /^\d{4}\/\d{2}$/
 
@@ -25,7 +28,14 @@ function formatTransferResponse<T extends { fee: number | null }>(transfer: T) {
 }
 
 export async function listTransfers(saveId: string, seasonFilter?: string) {
-  const save = await prisma.save.findUnique({ where: { id: saveId } })
+  const cacheKey = seasonFilter === 'current'
+    ? `save:${saveId}:transfers:current`
+    : `save:${saveId}:transfers`
+
+  const cached = await cacheGet<unknown[]>(cacheKey)
+  if (cached) return cached
+
+  const save = await prisma.save.findUnique({ where: { id: saveId }, select: { id: true, currentSeason: true } })
   if (!save) throw new NotFoundError('Save não encontrado.')
 
   const where: { saveId: string; season?: string } = { saveId }
@@ -33,11 +43,27 @@ export async function listTransfers(saveId: string, seasonFilter?: string) {
 
   const transfers = await prisma.transfer.findMany({
     where,
-    include: { player: true },
+    select: {
+      id: true,
+      saveId: true,
+      playerName: true,
+      type: true,
+      from: true,
+      to: true,
+      fee: true,
+      season: true,
+      createdAt: true,
+      playerId: true,
+      player: {
+        select: { id: true, name: true, position: true },
+      },
+    },
     orderBy: { createdAt: 'desc' },
   })
 
-  return transfers.map(formatTransferResponse)
+  const result = transfers.map(formatTransferResponse)
+  await cacheSet(cacheKey, result, TTL_TRANSFERS)
+  return result
 }
 
 export async function createTransfer(
@@ -99,33 +125,31 @@ export async function createTransfer(
           where: { saveId, name: data.playerName, activeClubStintId: null },
         })
 
-        const targetPlayer = inactiveMatch ?? await tx.player.create({
-          data: {
-            saveId,
-            name: data.playerName,
-            position: Position.MEI,
-            age: 25,
-            status: newStatus,
-            ovr: 70,
-          },
-        })
+        const targetPlayer = inactiveMatch
+          ? await tx.player.update({
+              where: { id: inactiveMatch.id },
+              data: { activeClubStintId: currentStint?.id ?? null, status: newStatus },
+            })
+          : await tx.player.create({
+              data: {
+                saveId,
+                name: data.playerName,
+                position: Position.MEI,
+                age: 25,
+                status: newStatus,
+                ovr: 70,
+                activeClubStintId: currentStint?.id ?? null,
+              },
+            })
 
         resolvedPlayerId = targetPlayer.id
-        await tx.player.update({
-          where: { id: targetPlayer.id },
-          data: { activeClubStintId: currentStint?.id ?? null, status: newStatus },
-        })
       }
 
       if (currentStint && resolvedPlayerId) {
-        const existing = await tx.playerSeasonStats.findFirst({
-          where: { playerId: resolvedPlayerId, clubStintId: currentStint.id, season: save.currentSeason },
+        await tx.playerSeasonStats.createMany({
+          data: [{ playerId: resolvedPlayerId, clubStintId: currentStint.id, season: save.currentSeason }],
+          skipDuplicates: true,
         })
-        if (!existing) {
-          await tx.playerSeasonStats.create({
-            data: { playerId: resolvedPlayerId, clubStintId: currentStint.id, season: save.currentSeason },
-          })
-        }
       }
     }
 
@@ -155,13 +179,14 @@ export async function createTransfer(
     }
 
     // Update balance only for compra/venda (not for empréstimos)
+    // Usa o `save` já carregado fora da transação — evita query duplicada
     const fee = data.fee ?? 0
-    let currentSave = await tx.save.findUnique({ where: { id: saveId } })
     const balanceAffects = data.type === TransferType.compra || data.type === TransferType.venda
 
-    let updatedSave = currentSave
+    // Tipar apenas os campos usados por formatSaveResponse
+    let updatedSave: { id: string; balance: number | null; budget: number | null; currentSeason: string; currentYear: number } = save
     if (fee > 0 && balanceAffects) {
-      const currentBalance = currentSave?.balance ?? 0
+      const currentBalance = save.balance ?? 0
       const newBalance =
         data.type === TransferType.compra
           ? currentBalance - fee
@@ -174,6 +199,8 @@ export async function createTransfer(
 
     return { transfer: newTransfer, playerId: resolvedPlayerId, save: updatedSave }
   })
+
+  await cacheInvalidate(`save:${saveId}:transfers`, `save:${saveId}:transfers:current`)
 
   return {
     transfer: formatTransferResponse(result.transfer),
@@ -194,19 +221,21 @@ export async function updateTransfer(
     season?: string
   }
 ) {
-  const transfer = await prisma.transfer.findFirst({ where: { id: tid, saveId } })
+  const [transfer, currentSave] = await Promise.all([
+    prisma.transfer.findFirst({ where: { id: tid, saveId } }),
+    prisma.save.findUnique({ where: { id: saveId }, select: { id: true, balance: true } }),
+  ])
   if (!transfer) throw new NotFoundError('Transferência não encontrada.')
 
   if (data.season && !SEASON_PATTERN.test(data.season)) {
     throw new AppError('Formato de temporada inválido. Use o formato YYYY/YY (ex: 2028/29).', 400)
   }
 
-  return prisma.$transaction(async (tx) => {
+  const updated = await prisma.$transaction(async (tx) => {
     const feeChanged = data.fee !== undefined && data.fee !== transfer.fee
     const typeChanged = data.type !== undefined && data.type !== transfer.type
 
     if (feeChanged || typeChanged) {
-      const currentSave = await tx.save.findUnique({ where: { id: saveId } })
       let newBalance = currentSave?.balance ?? 0
 
       // Reverse old fee effect (only for compra/venda)
@@ -229,6 +258,9 @@ export async function updateTransfer(
 
     return tx.transfer.update({ where: { id: tid }, data })
   })
+
+  await cacheInvalidate(`save:${saveId}:transfers`, `save:${saveId}:transfers:current`)
+  return updated
 }
 
 export async function deleteTransfer(saveId: string, tid: string) {
@@ -236,4 +268,5 @@ export async function deleteTransfer(saveId: string, tid: string) {
   if (!transfer) throw new NotFoundError('Transferência não encontrada.')
 
   await prisma.transfer.delete({ where: { id: tid } })
+  await cacheInvalidate(`save:${saveId}:transfers`, `save:${saveId}:transfers:current`)
 }

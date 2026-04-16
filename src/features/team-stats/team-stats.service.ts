@@ -1,7 +1,7 @@
 import { prisma } from '../../shared/lib/prisma.js'
 import { AppError, NotFoundError } from '../../shared/utils/errors.js'
 import { CupResult } from '@prisma/client'
-import { cacheGet, cacheSet, cacheInvalidate, cacheInvalidatePattern } from '../../shared/utils/cache.js'
+import { cacheGet, cacheSet, cacheInvalidate } from '../../shared/utils/cache.js'
 
 const TTL_TEAM_STATS = 60 * 60 // 1h
 
@@ -19,10 +19,19 @@ export async function listTeamStats(saveId: string, seasonFilter?: string) {
 }
 
 async function fetchTeamStats(saveId: string, seasonFilter?: string) {
-  const save = await prisma.save.findUnique({
-    where: { id: saveId },
-    include: { clubStints: { where: { isCurrent: true } } },
-  })
+  const [save, allStats] = await Promise.all([
+    prisma.save.findUnique({
+      where: { id: saveId },
+      include: { clubStints: { where: { isCurrent: true } } },
+    }),
+    !seasonFilter
+      ? prisma.teamSeasonStats.findMany({
+          where: { clubStint: { saveId } },
+          include: { clubStint: { select: { club: true } } },
+          orderBy: { createdAt: 'asc' },
+        })
+      : Promise.resolve(null),
+  ])
   if (!save) throw new NotFoundError('Save não encontrado.')
 
   if (seasonFilter) {
@@ -48,11 +57,7 @@ async function fetchTeamStats(saveId: string, seasonFilter?: string) {
     return [stats]
   }
 
-  return prisma.teamSeasonStats.findMany({
-    where: { clubStint: { saveId } },
-    include: { clubStint: { select: { club: true } } },
-    orderBy: { createdAt: 'asc' },
-  })
+  return allStats!
 }
 
 export async function updateTeamStats(
@@ -89,8 +94,12 @@ export async function updateTeamStats(
 
   const result = await prisma.teamSeasonStats.update({ where: { id: statsId }, data })
 
-  await cacheInvalidate(`save:${saveId}:team-stats`)
-  await cacheInvalidatePattern(`save:${saveId}:team-stats:*`)
+  // Invalida chaves previsíveis diretamente — evita Redis SCAN (O(N) no keyspace)
+  await cacheInvalidate(
+    `save:${saveId}:team-stats`,
+    `save:${saveId}:team-stats:${stats.season}`,
+    `save:${saveId}:team-stats:current`,
+  )
 
   return result
 }
