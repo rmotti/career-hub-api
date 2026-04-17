@@ -15,7 +15,7 @@ export async function getSave(
 }
 
 export async function createSave(
-  request: FastifyRequest<{ Body: { name: string; club: string; budget: number } }>,
+  request: FastifyRequest<{ Body: { name: string; club: string; budget: number; europeanCompetitionId?: string | null } }>,
   reply: FastifyReply
 ) {
   const save = await savesService.createSave({ ...request.body, userId: request.user!.id })
@@ -30,6 +30,7 @@ export async function updateSave(
       currentSeason?: string
       budget?: number
       balance?: number
+      europeanCompetitionId?: string | null
     }
   }>,
   reply: FastifyReply

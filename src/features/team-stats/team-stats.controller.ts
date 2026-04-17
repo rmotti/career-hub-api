@@ -26,8 +26,7 @@ export async function updateTeamStats(
       draws?: number
       losses?: number
       leaguePosition?: number
-      europeanCupResult?: CupResult
-      nationalCupResult?: CupResult
+      cupResult?: CupResult
     }
   }>,
   reply: FastifyReply

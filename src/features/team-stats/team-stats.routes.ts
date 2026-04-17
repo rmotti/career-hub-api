@@ -11,7 +11,7 @@ export async function teamStatsRoutes(app: FastifyInstance) {
     schema: {
       tags: ['Team Stats'],
       summary: 'Listar estatísticas da equipe',
-      description: 'Com `?season=current`: retorna apenas os stats da temporada atual. Sem query param: retorna todos os stats de todos os clubes.',
+      description: 'Retorna estatísticas por competição. Com `?season=current`: temporada atual. Sem filtro: todas as temporadas de todos os clubes.',
       params: {
         type: 'object',
         properties: {
@@ -21,7 +21,7 @@ export async function teamStatsRoutes(app: FastifyInstance) {
       querystring: {
         type: 'object',
         properties: {
-          season: { type: 'string', description: 'Use "current" para a temporada atual, ou "2027/28" para uma temporada específica' },
+          season: { type: 'string', description: 'Use "current" para a temporada atual, ou "2027/28" para uma específica' },
         },
       },
     },
@@ -36,8 +36,7 @@ export async function teamStatsRoutes(app: FastifyInstance) {
       draws?: number
       losses?: number
       leaguePosition?: number
-      europeanCupResult?: typeof CUP_RESULT_VALUES[number]
-      nationalCupResult?: typeof CUP_RESULT_VALUES[number]
+      cupResult?: typeof CUP_RESULT_VALUES[number]
     }
   }>(
     '/saves/:saveId/team-stats/:statsId',
@@ -45,6 +44,7 @@ export async function teamStatsRoutes(app: FastifyInstance) {
       schema: {
         tags: ['Team Stats'],
         summary: 'Atualizar estatísticas da equipe',
+        description: 'Atualiza stats de uma competição específica. Para copas/europeia use `cupResult`. Para liga use `leaguePosition`.',
         params: {
           type: 'object',
           properties: {
@@ -55,14 +55,13 @@ export async function teamStatsRoutes(app: FastifyInstance) {
         body: {
           type: 'object',
           properties: {
-            goalsPro: { type: 'integer', minimum: 0, example: 55 },
-            goalsAgainst: { type: 'integer', minimum: 0, example: 22 },
-            wins: { type: 'integer', minimum: 0, example: 24 },
-            draws: { type: 'integer', minimum: 0, example: 5 },
-            losses: { type: 'integer', minimum: 0, example: 9 },
+            goalsPro:      { type: 'integer', minimum: 0, example: 55 },
+            goalsAgainst:  { type: 'integer', minimum: 0, example: 22 },
+            wins:          { type: 'integer', minimum: 0, example: 24 },
+            draws:         { type: 'integer', minimum: 0, example: 5  },
+            losses:        { type: 'integer', minimum: 0, example: 9  },
             leaguePosition: { type: 'integer', minimum: 1, example: 1 },
-            europeanCupResult: { type: 'string', enum: [...CUP_RESULT_VALUES], example: 'Campeao' },
-            nationalCupResult: { type: 'string', enum: [...CUP_RESULT_VALUES], example: 'Semifinal' },
+            cupResult:     { type: 'string', enum: [...CUP_RESULT_VALUES], example: 'Campeao' },
           },
         },
       },

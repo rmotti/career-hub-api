@@ -14,6 +14,7 @@ import { playersRoutes } from './features/players/players.routes.js'
 import { teamStatsRoutes } from './features/team-stats/team-stats.routes.js'
 import { transfersRoutes } from './features/transfers/transfers.routes.js'
 import { trophiesRoutes } from './features/trophies/trophies.routes.js'
+import { competitionsRoutes } from './features/competitions/competitions.routes.js'
 
 export const app = Fastify({
   logger: process.env.NODE_ENV !== 'production',
@@ -51,6 +52,7 @@ app.register(swagger, {
       { name: 'Team Stats', description: 'Estatísticas da equipe por temporada' },
       { name: 'Transfers', description: 'Transferências de jogadores' },
       { name: 'Trophies', description: 'Troféus conquistados' },
+      { name: 'Competitions', description: 'Competições disponíveis (liga, copa, europeia)' },
     ],
     components: {
       securitySchemes: {
@@ -91,6 +93,7 @@ app.register(async (protectedRoutes) => {
   protectedRoutes.register(teamStatsRoutes, { prefix: '/api' })
   protectedRoutes.register(transfersRoutes, { prefix: '/api' })
   protectedRoutes.register(trophiesRoutes, { prefix: '/api' })
+  protectedRoutes.register(competitionsRoutes, { prefix: '/api' })
 })
 
 app.setSchemaErrorFormatter((errors, _dataVar) => {

@@ -8,7 +8,7 @@ export async function trophiesRoutes(app: FastifyInstance) {
       schema: {
         tags: ['Trophies'],
         summary: 'Listar troféus do save',
-        description: 'Retorna todos os troféus com o nome do clube (via ClubStint).',
+        description: 'Retorna todos os troféus com clube e competição associados.',
         params: {
           type: 'object',
           properties: {
@@ -22,14 +22,14 @@ export async function trophiesRoutes(app: FastifyInstance) {
 
   app.post<{
     Params: { saveId: string }
-    Body: { name: string; year: number }
+    Body: { competitionId: string; year: number }
   }>(
     '/saves/:saveId/trophies',
     {
       schema: {
         tags: ['Trophies'],
         summary: 'Adicionar troféu',
-        description: 'Vincula o troféu ao ClubStint atual do save.',
+        description: 'Vincula o troféu ao ClubStint atual do save. Use `GET /api/competitions` para obter os IDs válidos.',
         params: {
           type: 'object',
           properties: {
@@ -38,9 +38,9 @@ export async function trophiesRoutes(app: FastifyInstance) {
         },
         body: {
           type: 'object',
-          required: ['name', 'year'],
+          required: ['competitionId', 'year'],
           properties: {
-            name: { type: 'string', minLength: 1, example: 'Premier League' },
+            competitionId: { type: 'string', description: 'UUID da competição (obtido via /api/competitions)' },
             year: { type: 'integer', example: 2027 },
           },
         },

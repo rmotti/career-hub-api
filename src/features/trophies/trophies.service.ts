@@ -19,25 +19,30 @@ async function fetchTrophies(saveId: string) {
     prisma.save.findUnique({ where: { id: saveId }, select: { id: true } }),
     prisma.trophy.findMany({
       where: { clubStint: { saveId } },
-      include: { clubStint: { select: { club: true } } },
+      include: {
+        clubStint: { select: { club: true } },
+        competition: true,
+      },
       orderBy: { year: 'desc' },
     }),
   ])
   if (!save) throw new NotFoundError('Save não encontrado.')
 
-  return trophies.map((t: (typeof trophies)[number]) => ({
+  return trophies.map((t) => ({
     id: t.id,
-    name: t.name,
     year: t.year,
     createdAt: t.createdAt,
     clubStintId: t.clubStintId,
     club: t.clubStint.club,
+    competition: t.competition
+      ? { id: t.competition.id, name: t.competition.name, type: t.competition.type }
+      : null,
   }))
 }
 
 export async function createTrophy(
   saveId: string,
-  data: { name: string; year: number }
+  data: { competitionId: string; year: number }
 ) {
   const save = await prisma.save.findUnique({
     where: { id: saveId },
@@ -48,11 +53,16 @@ export async function createTrophy(
   const currentStint = save.clubStints[0]
   if (!currentStint) throw new AppError('Não é possível adicionar troféu: nenhum clube ativo encontrado.', 400)
 
+  const competition = await prisma.competition.findUnique({ where: { id: data.competitionId } })
+  if (!competition) throw new AppError('Competição não encontrada.', 400)
+
   const result = await prisma.trophy.create({
     data: {
       clubStintId: currentStint.id,
-      ...data,
+      competitionId: data.competitionId,
+      year: data.year,
     },
+    include: { competition: true },
   })
 
   await cacheInvalidate(`save:${saveId}:trophies`)

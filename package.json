@@ -10,6 +10,8 @@
     "db:migrate": "prisma migrate dev",
     "db:generate": "prisma generate",
     "db:seed": "tsx prisma/seed.ts",
+    "db:seed-competitions": "tsx prisma/seed-competitions.ts",
+    "db:migrate-data": "tsx prisma/migrate-data.ts",
     "db:studio": "prisma studio"
   },
   "dependencies": {

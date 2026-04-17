@@ -12,7 +12,7 @@ export async function listTrophies(
 export async function createTrophy(
   request: FastifyRequest<{
     Params: { saveId: string }
-    Body: { name: string; year: number }
+    Body: { competitionId: string; year: number }
   }>,
   reply: FastifyReply
 ) {

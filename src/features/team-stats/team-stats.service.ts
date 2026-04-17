@@ -27,8 +27,11 @@ async function fetchTeamStats(saveId: string, seasonFilter?: string) {
     !seasonFilter
       ? prisma.teamSeasonStats.findMany({
           where: { clubStint: { saveId } },
-          include: { clubStint: { select: { club: true } } },
-          orderBy: { createdAt: 'asc' },
+          include: {
+            clubStint: { select: { club: true } },
+            competition: true,
+          },
+          orderBy: [{ season: 'asc' }, { createdAt: 'asc' }],
         })
       : Promise.resolve(null),
   ])
@@ -40,21 +43,15 @@ async function fetchTeamStats(saveId: string, seasonFilter?: string) {
 
     const targetSeason = seasonFilter === 'current' ? save.currentSeason : seasonFilter
 
-    let stats = await prisma.teamSeasonStats.findUnique({
-      where: { clubStintId_season: { clubStintId: currentStint.id, season: targetSeason } },
+    const stats = await prisma.teamSeasonStats.findMany({
+      where: { clubStintId: currentStint.id, season: targetSeason },
+      include: { competition: true },
+      orderBy: { createdAt: 'asc' },
     })
 
-    if (!stats && seasonFilter === 'current') {
-      stats = await prisma.teamSeasonStats.upsert({
-        where: { clubStintId_season: { clubStintId: currentStint.id, season: targetSeason } },
-        create: { clubStintId: currentStint.id, season: targetSeason },
-        update: {},
-      })
-    }
+    if (!stats.length) throw new NotFoundError(`Estatísticas não encontradas para a temporada ${targetSeason}.`)
 
-    if (!stats) throw new NotFoundError(`Estatísticas não encontradas para a temporada ${targetSeason}.`)
-
-    return [stats]
+    return stats
   }
 
   return allStats!
@@ -70,8 +67,7 @@ export async function updateTeamStats(
     draws?: number
     losses?: number
     leaguePosition?: number
-    europeanCupResult?: CupResult
-    nationalCupResult?: CupResult
+    cupResult?: CupResult
   }
 ) {
   if (data.leaguePosition !== undefined && data.leaguePosition < 1) {
@@ -79,10 +75,7 @@ export async function updateTeamStats(
   }
 
   const validCupResults = Object.values(CupResult)
-  if (data.europeanCupResult && !validCupResults.includes(data.europeanCupResult)) {
-    throw new AppError(`Resultado de copa inválido. Valores aceitos: ${validCupResults.join(', ')}.`, 400)
-  }
-  if (data.nationalCupResult && !validCupResults.includes(data.nationalCupResult)) {
+  if (data.cupResult && !validCupResults.includes(data.cupResult)) {
     throw new AppError(`Resultado de copa inválido. Valores aceitos: ${validCupResults.join(', ')}.`, 400)
   }
 
@@ -92,9 +85,12 @@ export async function updateTeamStats(
 
   if (!stats) throw new NotFoundError('Estatísticas não encontradas.')
 
-  const result = await prisma.teamSeasonStats.update({ where: { id: statsId }, data })
+  const result = await prisma.teamSeasonStats.update({
+    where: { id: statsId },
+    data,
+    include: { competition: true },
+  })
 
-  // Invalida chaves previsíveis diretamente — evita Redis SCAN (O(N) no keyspace)
   await cacheInvalidate(
     `save:${saveId}:team-stats`,
     `save:${saveId}:team-stats:${stats.season}`,

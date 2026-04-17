@@ -23,13 +23,13 @@ export async function savesRoutes(app: FastifyInstance) {
     },
   }, savesController.getSave)
 
-  app.post<{ Body: { name: string; club: string; budget: number } }>(
+  app.post<{ Body: { name: string; club: string; budget: number; europeanCompetitionId?: string | null } }>(
     '/saves',
     {
       schema: {
         tags: ['Saves'],
         summary: 'Criar novo save',
-        description: 'Cria um save, um ClubStint inicial e TeamSeasonStats para a temporada 2026/27. O `balance` é inicializado igual ao `budget`.',
+        description: 'Cria um save, um ClubStint inicial e TeamSeasonStats para cada competição do país do clube. O `balance` é inicializado igual ao `budget`.',
         body: {
           type: 'object',
           required: ['name', 'club', 'budget'],
@@ -37,6 +37,7 @@ export async function savesRoutes(app: FastifyInstance) {
             name: { type: 'string', minLength: 1, description: 'Nome do save' },
             club: { type: 'string', minLength: 1, description: 'Clube inicial (deve existir na lista de /api/clubs)' },
             budget: { type: 'number', minimum: 0, example: 100, description: 'Orçamento inicial em milhões de €: 100 = €100M' },
+            europeanCompetitionId: { type: 'string', nullable: true, description: 'UUID da competição europeia (Champions, Europa, Conference) ou null' },
           },
         },
       },
@@ -51,6 +52,7 @@ export async function savesRoutes(app: FastifyInstance) {
       currentSeason?: string
       budget?: number
       balance?: number
+      europeanCompetitionId?: string | null
     }
   }>(
     '/saves/:saveId',
@@ -58,7 +60,7 @@ export async function savesRoutes(app: FastifyInstance) {
       schema: {
         tags: ['Saves'],
         summary: 'Atualizar save',
-        description: 'Ao alterar `currentSeason`, cria automaticamente TeamSeasonStats e PlayerSeasonStats vazios para a nova temporada.',
+        description: 'Ao alterar `currentSeason`, cria automaticamente TeamSeasonStats (por competição), PlayerSeasonStats e troféus para a nova temporada. `europeanCompetitionId` define em qual europeia o clube participa (null = nenhuma).',
         params: {
           type: 'object',
           properties: {
@@ -72,6 +74,7 @@ export async function savesRoutes(app: FastifyInstance) {
             currentSeason: { type: 'string', example: '2027/28' },
             budget: { type: 'number', minimum: 0, example: 100, description: 'Em milhões de €' },
             balance: { type: 'number', minimum: 0, example: 12, description: 'Em milhões de €' },
+            europeanCompetitionId: { type: 'string', nullable: true, description: 'UUID da competição europeia ou null para nenhuma' },
           },
         },
       },

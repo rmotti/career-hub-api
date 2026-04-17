@@ -117,6 +117,14 @@ export const CLUBS_BY_LEAGUE: Record<string, string[]> = {
 
 export const CLUBS: string[] = Object.values(CLUBS_BY_LEAGUE).flat()
 
+export const LEAGUE_TO_COUNTRY: Record<string, string> = {
+  'Premier League': 'England',
+  'La Liga':        'Spain',
+  'Bundesliga':     'Germany',
+  'Serie A':        'Italy',
+  'Ligue 1':        'France',
+}
+
 export function getAllClubs(): string[] {
   return CLUBS
 }
@@ -127,4 +135,11 @@ export function getClubsByLeague(league: string): string[] | undefined {
 
 export function clubExists(club: string): boolean {
   return CLUBS.includes(club)
+}
+
+export function findLeagueByClub(club: string): string | null {
+  for (const [league, clubs] of Object.entries(CLUBS_BY_LEAGUE)) {
+    if (clubs.includes(club)) return league
+  }
+  return null
 }

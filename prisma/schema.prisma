@@ -170,23 +170,38 @@ model PlayerSeasonStats {
   @@index([clubStintId, season])
 }
 
-model TeamSeasonStats {
-  id                  String     @id @default(uuid())
-  clubStintId         String
-  clubStint           ClubStint  @relation(fields: [clubStintId], references: [id], onDelete: Cascade)
-  season              String
-  goalsPro            Int        @default(0)
-  goalsAgainst        Int        @default(0)
-  wins                Int        @default(0)
-  draws               Int        @default(0)
-  losses              Int        @default(0)
-  leaguePosition      Int?
-  europeanCupResult   CupResult  @default(NaoParticipou)
-  nationalCupResult   CupResult  @default(NaoParticipou)
-  createdAt           DateTime   @default(now())
-  updatedAt           DateTime   @updatedAt
+model Competition {
+  id        String          @id @default(uuid())
+  name      String          @unique
+  type      CompetitionType
+  country   String?
 
-  @@unique([clubStintId, season])
+  teamStats TeamSeasonStats[]
+  trophies  Trophy[]
+}
+
+model TeamSeasonStats {
+  id                  String       @id @default(uuid())
+  clubStintId         String
+  clubStint           ClubStint    @relation(fields: [clubStintId], references: [id], onDelete: Cascade)
+  competitionId       String?
+  competition         Competition? @relation(fields: [competitionId], references: [id])
+  season              String
+  goalsPro            Int          @default(0)
+  goalsAgainst        Int          @default(0)
+  wins                Int          @default(0)
+  draws               Int          @default(0)
+  losses              Int          @default(0)
+  leaguePosition      Int?
+  // deprecated — migrar para cupResult via prisma/migrate-data.ts
+  europeanCupResult   CupResult    @default(NaoParticipou)
+  nationalCupResult   CupResult    @default(NaoParticipou)
+  cupResult           CupResult?
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  @@unique([clubStintId, competitionId, season])
+  @@index([clubStintId, season])
 }
 
 model Transfer {
@@ -208,14 +223,16 @@ model Transfer {
 }
 
 model Trophy {
-  id           String    @id @default(uuid())
-  clubStintId  String
-  clubStint    ClubStint @relation(fields: [clubStintId], references: [id], onDelete: Cascade)
-  name         String
-  year         Int
-  createdAt    DateTime  @default(now())
+  id            String       @id @default(uuid())
+  clubStintId   String
+  clubStint     ClubStint    @relation(fields: [clubStintId], references: [id], onDelete: Cascade)
+  competitionId String?
+  competition   Competition? @relation(fields: [competitionId], references: [id])
+  name          String?      // deprecated — removido após migrate-data.ts
+  year          Int
+  createdAt     DateTime     @default(now())
 
-  @@unique([clubStintId, name])
+  @@unique([clubStintId, competitionId, year])
 }
 
 enum Position {
@@ -258,4 +275,11 @@ enum CupResult {
   OitavasOuFaseDeGrupos
   Eliminado
   NaoParticipou
+}
+
+enum CompetitionType {
+  League
+  NationalCup
+  SuperCup
+  EuropeanCup
 }
