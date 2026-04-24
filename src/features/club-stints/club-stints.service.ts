@@ -80,7 +80,16 @@ export async function createClubStint(saveId: string, data: { club: string }) {
     return stint
   })
 
-  await cacheInvalidate(`save:${saveId}:club-stints`)
+  await cacheInvalidate(
+    `save:${saveId}:club-stints`,
+    `save:${saveId}:transfers`,
+    `save:${saveId}:transfers:current`,
+    `save:${saveId}:team-stats`,
+    `save:${saveId}:team-stats:${save.currentSeason}`,
+    `save:${saveId}:team-stats:current`,
+    `save:${saveId}:players`,
+    `save:${saveId}:players:active`,
+  )
 
   return newStint
 }

@@ -103,6 +103,7 @@ model ClubStint {
   playerSeasonStats PlayerSeasonStats[]
   teamSeasonStats  TeamSeasonStats[]
   trophies         Trophy[]
+  transfers        Transfer[]
   players          Player[]           @relation("ActiveClubStint")
   createdAt        DateTime           @default(now())
 
@@ -205,21 +206,24 @@ model TeamSeasonStats {
 }
 
 model Transfer {
-  id          String       @id @default(uuid())
-  saveId      String
-  save        Save         @relation(fields: [saveId], references: [id], onDelete: Cascade)
-  playerId    String?
-  player      Player?      @relation(fields: [playerId], references: [id])
-  playerName  String
-  type        TransferType
-  from        String
-  to          String
-  fee         Float?
-  season      String
-  createdAt   DateTime     @default(now())
+  id           String       @id @default(uuid())
+  saveId       String
+  save         Save         @relation(fields: [saveId], references: [id], onDelete: Cascade)
+  clubStintId  String?
+  clubStint    ClubStint?   @relation(fields: [clubStintId], references: [id])
+  playerId     String?
+  player       Player?      @relation(fields: [playerId], references: [id])
+  playerName   String
+  type         TransferType
+  from         String
+  to           String
+  fee          Float?
+  season       String
+  createdAt    DateTime     @default(now())
 
   @@index([saveId])
   @@index([saveId, season])
+  @@index([clubStintId, season])
 }
 
 model Trophy {

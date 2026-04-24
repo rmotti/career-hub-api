@@ -35,11 +35,18 @@ export async function listTransfers(saveId: string, seasonFilter?: string) {
   const cached = await cacheGet<unknown[]>(cacheKey)
   if (cached) return cached
 
-  const save = await prisma.save.findUnique({ where: { id: saveId }, select: { id: true, currentSeason: true } })
+  const save = await prisma.save.findUnique({
+    where: { id: saveId },
+    select: { id: true, currentSeason: true, clubStints: { where: { isCurrent: true }, select: { id: true } } },
+  })
   if (!save) throw new NotFoundError('Save não encontrado.')
 
-  const where: { saveId: string; season?: string } = { saveId }
-  if (seasonFilter === 'current') where.season = save.currentSeason
+  const where: { saveId: string; season?: string; clubStintId?: string } = { saveId }
+  if (seasonFilter === 'current') {
+    where.season = save.currentSeason
+    const currentStint = save.clubStints[0]
+    if (currentStint) where.clubStintId = currentStint.id
+  }
 
   const transfers = await prisma.transfer.findMany({
     where,
@@ -157,6 +164,7 @@ export async function createTransfer(
     const newTransfer = await tx.transfer.create({
       data: {
         saveId,
+        clubStintId: currentStint?.id ?? null,
         playerName: data.playerName,
         type: data.type,
         from: data.from,
