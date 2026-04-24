@@ -1,6 +1,6 @@
 import { prisma } from '../../shared/lib/prisma.js'
 import { AppError, NotFoundError } from '../../shared/utils/errors.js'
-import { clubExists } from '../clubs/clubs.service.js'
+import { clubExists, findLeagueByClub, LEAGUE_TO_COUNTRY } from '../clubs/clubs.service.js'
 import { cacheGet, cacheSet, cacheInvalidate } from '../../shared/utils/cache.js'
 
 const TTL_CLUB_STINTS = 60 * 60 // 1h
@@ -33,7 +33,7 @@ export async function getCurrentClubStint(saveId: string) {
   return current
 }
 
-export async function createClubStint(saveId: string, data: { club: string }) {
+export async function createClubStint(saveId: string, data: { club: string; europeanCompetitionId?: string | null }) {
   if (!clubExists(data.club)) {
     throw new AppError(`Clube inválido: '${data.club}' não encontrado na lista de clubes disponíveis.`, 400)
   }
@@ -41,11 +41,49 @@ export async function createClubStint(saveId: string, data: { club: string }) {
   const save = await prisma.save.findUnique({ where: { id: saveId } })
   if (!save) throw new NotFoundError('Save não encontrado.')
 
+  if (data.europeanCompetitionId) {
+    const europeanCompetition = await prisma.competition.findFirst({
+      where: { id: data.europeanCompetitionId, type: 'EuropeanCup' },
+      select: { id: true },
+    })
+    if (!europeanCompetition) throw new AppError('Competição europeia inválida.', 400)
+  }
+
+  const league = findLeagueByClub(data.club)
+  const country = league ? LEAGUE_TO_COUNTRY[league] : null
+
   const currentStint = await prisma.clubStint.findFirst({
     where: { saveId, isCurrent: true },
   })
 
   const newStint = await prisma.$transaction(async (tx) => {
+    const [countryCompetitions, currentEuropeanStats] = await Promise.all([
+      country
+        ? tx.competition.findMany({
+            where: { country },
+            select: { id: true },
+          })
+        : Promise.resolve([]),
+      currentStint && !data.europeanCompetitionId
+        ? tx.teamSeasonStats.findMany({
+            where: {
+              clubStintId: currentStint.id,
+              season: save.currentSeason,
+              competition: { is: { type: 'EuropeanCup' } },
+            },
+            select: { competitionId: true },
+          })
+        : Promise.resolve([]),
+    ])
+
+    const competitionIds = [
+      ...countryCompetitions.map((competition) => competition.id),
+      ...(data.europeanCompetitionId
+        ? [data.europeanCompetitionId]
+        : currentEuropeanStats.flatMap((stats) => stats.competitionId ? [stats.competitionId] : [])),
+    ]
+    const uniqueCompetitionIds = [...new Set(competitionIds)]
+
     if (currentStint) {
       await tx.clubStint.update({
         where: { id: currentStint.id },
@@ -70,12 +108,16 @@ export async function createClubStint(saveId: string, data: { club: string }) {
       },
     })
 
-    await tx.teamSeasonStats.create({
-      data: {
-        clubStintId: stint.id,
-        season: save.currentSeason,
-      },
-    })
+    if (uniqueCompetitionIds.length > 0) {
+      await tx.teamSeasonStats.createMany({
+        data: uniqueCompetitionIds.map((competitionId) => ({
+          clubStintId: stint.id,
+          season: save.currentSeason,
+          competitionId,
+        })),
+        skipDuplicates: true,
+      })
+    }
 
     return stint
   })

@@ -26,7 +26,7 @@ async function fetchTeamStats(saveId: string, seasonFilter?: string) {
     }),
     !seasonFilter
       ? prisma.teamSeasonStats.findMany({
-          where: { clubStint: { saveId } },
+          where: { clubStint: { saveId }, competitionId: { not: null }, competition: { isNot: null } },
           include: {
             clubStint: { select: { club: true } },
             competition: true,
@@ -44,7 +44,7 @@ async function fetchTeamStats(saveId: string, seasonFilter?: string) {
     const targetSeason = seasonFilter === 'current' ? save.currentSeason : seasonFilter
 
     const stats = await prisma.teamSeasonStats.findMany({
-      where: { clubStintId: currentStint.id, season: targetSeason },
+      where: { clubStintId: currentStint.id, season: targetSeason, competitionId: { not: null }, competition: { isNot: null } },
       include: { competition: true },
       orderBy: { createdAt: 'asc' },
     })

@@ -37,13 +37,13 @@ export async function clubStintsRoutes(app: FastifyInstance) {
     clubStintsController.getCurrentClubStint
   )
 
-  app.post<{ Params: { saveId: string }; Body: { club: string } }>(
+  app.post<{ Params: { saveId: string }; Body: { club: string; europeanCompetitionId?: string | null } }>(
     '/saves/:saveId/club-stints',
     {
       schema: {
         tags: ['Club Stints'],
         summary: 'Mudar de clube',
-        description: 'Operação crítica em transação: fecha o stint atual, abre um novo, cria TeamSeasonStats e desvincula todos os jogadores.',
+        description: 'Operação crítica em transação: fecha o stint atual, abre um novo, cria TeamSeasonStats por competição do país e desvincula todos os jogadores.',
         params: {
           type: 'object',
           properties: {
@@ -55,6 +55,7 @@ export async function clubStintsRoutes(app: FastifyInstance) {
           required: ['club'],
           properties: {
             club: { type: 'string', minLength: 1, description: 'Nome do novo clube (deve existir em /api/clubs)' },
+            europeanCompetitionId: { type: 'string', nullable: true, description: 'UUID da competição europeia para a temporada atual. Se omitido, reaproveita a europeia do stint atual quando existir.' },
           },
         },
       },

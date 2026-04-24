@@ -18,7 +18,7 @@ export async function getCurrentClubStint(
 }
 
 export async function createClubStint(
-  request: FastifyRequest<{ Params: { saveId: string }; Body: { club: string } }>,
+  request: FastifyRequest<{ Params: { saveId: string }; Body: { club: string; europeanCompetitionId?: string | null } }>,
   reply: FastifyReply
 ) {
   const stint = await clubStintsService.createClubStint(
