@@ -17,5 +17,31 @@ services:
     ports:
       - "6380:6379"
 
+  influxdb:
+    image: influxdb:1.8-alpine
+    container_name: fc26_influxdb
+    environment:
+      INFLUXDB_DB: k6
+    ports:
+      - "8086:8086"
+    volumes:
+      - fc26_influxdb_data:/var/lib/influxdb
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: fc26_grafana
+    depends_on:
+      - influxdb
+    ports:
+      - "3000:3000"
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+    volumes:
+      - fc26_grafana_data:/var/lib/grafana
+      - ./load-test/grafana/provisioning:/etc/grafana/provisioning
+
 volumes:
   fc26_data:
+  fc26_influxdb_data:
+  fc26_grafana_data:
