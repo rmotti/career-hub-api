@@ -48,7 +48,13 @@ export async function listPlayers(saveId: string, activeOnly?: boolean, season?:
 async function fetchPlayers(saveId: string, activeOnly?: boolean, season?: string) {
   const save = await prisma.save.findUnique({
     where: { id: saveId },
-    include: { clubStints: { where: { isCurrent: true } } },
+    select: {
+      currentSeason: true,
+      clubStints: {
+        where: { isCurrent: true },
+        select: { id: true, club: true },
+      },
+    },
   })
   if (!save) throw new NotFoundError('Save não encontrado.')
 

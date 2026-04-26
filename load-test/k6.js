@@ -55,7 +55,7 @@ export const options = {
 }
 
 // Pool de usuários de teste — crie com load-test/seed-users.js antes de rodar
-const TEST_USERS = Array.from({ length: 20 }, (_, i) => ({
+const TEST_USERS = Array.from({ length: 200 }, (_, i) => ({
   email: `loadtest+${i + 1}@careerhub.test`,
   password: 'loadtest123',
 }))

@@ -29,9 +29,15 @@ export async function listEuropeanCompetitions() {
 }
 
 export async function getCompetitionIdsByCountry(country: string): Promise<string[]> {
+  const key = `competitions:country:${country}:ids`
+  const cached = await cacheGet<string[]>(key)
+  if (cached) return cached
+
   const comps = await prisma.competition.findMany({
     where: { country },
     select: { id: true },
   })
-  return comps.map((c) => c.id)
+  const ids = comps.map((c) => c.id)
+  await cacheSet(key, ids, TTL)
+  return ids
 }
