@@ -8,8 +8,6 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
-// ── Auth models (Better Auth) ─────────────────────────────────────────────────
-
 model User {
   id            String    @id
   name          String
@@ -18,14 +16,14 @@ model User {
   image         String?
   role          String    @default("user")
   plan          UserPlan  @default(FREE)
+  createdAt     DateTime
+  updatedAt     DateTime
   banned        Boolean   @default(false)
   banReason     String?
   banExpires    DateTime?
-  createdAt     DateTime
-  updatedAt     DateTime
-  sessions      Session[]
   accounts      Account[]
   saves         Save[]
+  sessions      Session[]
 }
 
 model Session {
@@ -46,7 +44,6 @@ model Account {
   accountId             String
   providerId            String
   userId                String
-  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   accessToken           String?
   refreshToken          String?
   idToken               String?
@@ -56,6 +53,7 @@ model Account {
   password              String?
   createdAt             DateTime
   updatedAt             DateTime
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Verification {
@@ -67,70 +65,62 @@ model Verification {
   updatedAt  DateTime?
 }
 
-enum UserPlan {
-  FREE
-  PRO
-  PREMIUM
-}
-
-// ── App models ────────────────────────────────────────────────────────────────
-
 model Save {
-  id             String      @id @default(uuid())
-  userId         String
-  user           User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  name           String
-  currentYear    Int         @default(2025)
-  currentSeason  String      @default("2025/26")
-  budget         Float?
-  balance        Float?
-  clubStints     ClubStint[]
-  players        Player[]
-  transfers      Transfer[]
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
+  id            String      @id @default(uuid())
+  name          String
+  currentYear   Int         @default(2026)
+  currentSeason String      @default("2026/27")
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  budget        Float?
+  balance       Float?
+  userId        String
+  clubStints    ClubStint[]
+  players       Player[]
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transfers     Transfer[]
 }
 
 model ClubStint {
-  id               String             @id @default(uuid())
-  saveId           String
-  save             Save               @relation(fields: [saveId], references: [id], onDelete: Cascade)
-  club             String
-  startYear        String
-  endYear          String?
-  isCurrent        Boolean            @default(true)
+  id                String              @id @default(uuid())
+  saveId            String
+  club              String
+  startYear         String
+  endYear           String?
+  isCurrent         Boolean             @default(true)
+  createdAt         DateTime            @default(now())
+  save              Save                @relation(fields: [saveId], references: [id], onDelete: Cascade)
+  players           Player[]            @relation("ActiveClubStint")
   playerSeasonStats PlayerSeasonStats[]
-  teamSeasonStats  TeamSeasonStats[]
-  trophies         Trophy[]
-  transfers        Transfer[]
-  players          Player[]           @relation("ActiveClubStint")
-  createdAt        DateTime           @default(now())
+  teamSeasonStats   TeamSeasonStats[]
+  transfers         Transfer[]
+  trophies          Trophy[]
 
   @@index([saveId])
   @@index([saveId, isCurrent])
 }
 
 model Player {
-  id                String             @id @default(uuid())
+  id                String              @id @default(uuid())
   saveId            String
-  save              Save               @relation(fields: [saveId], references: [id], onDelete: Cascade)
   activeClubStintId String?
-  activeClubStint   ClubStint?         @relation("ActiveClubStint", fields: [activeClubStintId], references: [id])
   name              String
   position          Position
   age               Int
   status            PlayerStatus
   ovr               Int
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  salary            Float?
+  marketValue       Float?
   potential         Int?
   shirtNumber       Int?
   nation            String?
-  salary            Float?
-  marketValue       Float?
-  seasonStats       PlayerSeasonStats[]
+  activeClubStint   ClubStint?          @relation("ActiveClubStint", fields: [activeClubStintId], references: [id])
+  save              Save                @relation(fields: [saveId], references: [id], onDelete: Cascade)
   ovrHistory        PlayerOvrHistory[]
+  seasonStats       PlayerSeasonStats[]
   transfers         Transfer[]
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
 
   @@index([saveId])
   @@index([saveId, activeClubStintId])
@@ -143,82 +133,78 @@ model PlayerOvrHistory {
   ovr         Int
   marketValue Float?
   createdAt   DateTime @default(now())
-
-  player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  player      Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
 
   @@unique([playerId, season])
   @@index([playerId, createdAt(sort: Desc)])
 }
 
 model PlayerSeasonStats {
-  id           String    @id @default(uuid())
-  playerId     String
-  player       Player    @relation(fields: [playerId], references: [id], onDelete: Cascade)
-  clubStintId  String
-  clubStint    ClubStint @relation(fields: [clubStintId], references: [id], onDelete: Cascade)
-  season       String
-  goals        Int       @default(0)
-  assists      Int       @default(0)
-  matches      Int       @default(0)
-  yellowCards  Int       @default(0)
-  redCards     Int       @default(0)
-  cleanSheets  Int       @default(0)
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  id          String    @id @default(uuid())
+  playerId    String
+  clubStintId String
+  season      String
+  goals       Int       @default(0)
+  assists     Int       @default(0)
+  yellowCards Int       @default(0)
+  redCards    Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  matches     Int       @default(0)
+  cleanSheets Int       @default(0)
+  clubStint   ClubStint @relation(fields: [clubStintId], references: [id], onDelete: Cascade)
+  player      Player    @relation(fields: [playerId], references: [id], onDelete: Cascade)
 
   @@unique([playerId, clubStintId, season])
   @@index([clubStintId, season])
 }
 
 model Competition {
-  id        String          @id @default(uuid())
-  name      String          @unique
+  id        String            @id @default(dbgenerated("(gen_random_uuid())::text"))
+  name      String            @unique
   type      CompetitionType
   country   String?
-
   teamStats TeamSeasonStats[]
   trophies  Trophy[]
 }
 
 model TeamSeasonStats {
-  id                  String       @id @default(uuid())
-  clubStintId         String
-  clubStint           ClubStint    @relation(fields: [clubStintId], references: [id], onDelete: Cascade)
-  competitionId       String?
-  competition         Competition? @relation(fields: [competitionId], references: [id])
-  season              String
-  goalsPro            Int          @default(0)
-  goalsAgainst        Int          @default(0)
-  wins                Int          @default(0)
-  draws               Int          @default(0)
-  losses              Int          @default(0)
-  leaguePosition      Int?
-  // deprecated — migrar para cupResult via prisma/migrate-data.ts
-  europeanCupResult   CupResult    @default(NaoParticipou)
-  nationalCupResult   CupResult    @default(NaoParticipou)
-  cupResult           CupResult?
-  createdAt           DateTime     @default(now())
-  updatedAt           DateTime     @updatedAt
+  id                String       @id @default(uuid())
+  clubStintId       String
+  season            String
+  goalsPro          Int          @default(0)
+  goalsAgainst      Int          @default(0)
+  wins              Int          @default(0)
+  draws             Int          @default(0)
+  losses            Int          @default(0)
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  europeanCupResult CupResult    @default(NaoParticipou)
+  leaguePosition    Int?
+  nationalCupResult CupResult    @default(NaoParticipou)
+  competitionId     String?
+  cupResult         CupResult?
+  clubStint         ClubStint    @relation(fields: [clubStintId], references: [id], onDelete: Cascade)
+  competition       Competition? @relation(fields: [competitionId], references: [id])
 
   @@unique([clubStintId, competitionId, season])
-  @@index([clubStintId, season])
 }
 
 model Transfer {
-  id           String       @id @default(uuid())
-  saveId       String
-  save         Save         @relation(fields: [saveId], references: [id], onDelete: Cascade)
-  clubStintId  String?
-  clubStint    ClubStint?   @relation(fields: [clubStintId], references: [id])
-  playerId     String?
-  player       Player?      @relation(fields: [playerId], references: [id])
-  playerName   String
-  type         TransferType
-  from         String
-  to           String
-  fee          Float?
-  season       String
-  createdAt    DateTime     @default(now())
+  id          String       @id @default(uuid())
+  saveId      String
+  playerId    String?
+  playerName  String
+  type        TransferType
+  from        String
+  to          String
+  season      String
+  createdAt   DateTime     @default(now())
+  fee         Float?
+  clubStintId String?
+  clubStint   ClubStint?   @relation(fields: [clubStintId], references: [id])
+  player      Player?      @relation(fields: [playerId], references: [id])
+  save        Save         @relation(fields: [saveId], references: [id], onDelete: Cascade)
 
   @@index([saveId])
   @@index([saveId, season])
@@ -228,30 +214,36 @@ model Transfer {
 model Trophy {
   id            String       @id @default(uuid())
   clubStintId   String
-  clubStint     ClubStint    @relation(fields: [clubStintId], references: [id], onDelete: Cascade)
-  competitionId String?
-  competition   Competition? @relation(fields: [competitionId], references: [id])
-  name          String?      // deprecated — removido após migrate-data.ts
+  name          String?
   year          Int
   createdAt     DateTime     @default(now())
+  competitionId String?
+  clubStint     ClubStint    @relation(fields: [clubStintId], references: [id], onDelete: Cascade)
+  competition   Competition? @relation(fields: [competitionId], references: [id])
 
   @@unique([clubStintId, competitionId, year])
 }
 
+enum UserPlan {
+  FREE
+  PRO
+  PREMIUM
+}
+
 enum Position {
   GOL
+  ZAG
+  MEI
+  ATA
   LD
   LE
-  ZAG
   VOL
   MC
   ME
   MD
-  MEI
   PE
   PD
   SA
-  ATA
 }
 
 enum PlayerStatus {
