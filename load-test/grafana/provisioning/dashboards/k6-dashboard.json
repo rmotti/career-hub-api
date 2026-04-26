@@ -18,8 +18,8 @@
       "id": 2, "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
       "type": "stat", "title": "Requests/s",
       "datasource": "InfluxDB",
-      "targets": [{ "rawQuery": true, "query": "SELECT non_negative_derivative(max(\"value\"), 1s) FROM \"http_reqs\" WHERE $timeFilter" }],
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "area" },
+      "targets": [{ "rawQuery": true, "query": "SELECT count(\"value\") FROM \"http_reqs\" WHERE $timeFilter GROUP BY time(1s) fill(0)" }],
+      "options": { "reduceOptions": { "calcs": ["mean"] }, "colorMode": "value", "graphMode": "area" },
       "fieldConfig": { "defaults": { "unit": "reqps", "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "blue", "value": null }] } } }
     },
     {
@@ -71,7 +71,7 @@
       "id": 7, "gridPos": { "x": 12, "y": 13, "w": 12, "h": 8 },
       "type": "timeseries", "title": "Requests/s ao longo do tempo",
       "datasource": "InfluxDB",
-      "targets": [{ "rawQuery": true, "query": "SELECT non_negative_derivative(max(\"value\"), 1s) FROM \"http_reqs\" WHERE $timeFilter GROUP BY time($__interval) fill(null)", "alias": "req/s" }],
+      "targets": [{ "rawQuery": true, "query": "SELECT count(\"value\") FROM \"http_reqs\" WHERE $timeFilter GROUP BY time($__interval) fill(0)", "alias": "req/s" }],
       "fieldConfig": { "defaults": { "unit": "reqps", "custom": { "lineWidth": 2, "fillOpacity": 10 }, "color": { "fixedColor": "blue", "mode": "fixed" } } }
     },
 
