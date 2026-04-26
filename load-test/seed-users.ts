@@ -1,8 +1,17 @@
-const BASE_URL = process.argv.includes('--base-url')
-  ? process.argv[process.argv.indexOf('--base-url') + 1]
+const args = process.argv
+
+const BASE_URL = args.includes('--base-url')
+  ? args[args.indexOf('--base-url') + 1]
   : 'http://localhost:3333'
 
-const TOTAL_USERS = 200
+const START = args.includes('--start')
+  ? parseInt(args[args.indexOf('--start') + 1], 10)
+  : 1
+
+const COUNT = args.includes('--count')
+  ? parseInt(args[args.indexOf('--count') + 1], 10)
+  : 200
+
 const PASSWORD = 'loadtest123'
 
 async function createUser(index: number): Promise<boolean> {
@@ -23,7 +32,7 @@ async function createUser(index: number): Promise<boolean> {
     return true
   }
 
-  if (res.status === 409 || body?.error?.includes('already') || body?.code === 'USER_ALREADY_EXISTS') {
+  if (res.status === 409 || body?.code?.includes('USER_ALREADY_EXISTS') || body?.error?.includes('already')) {
     console.log(`~ Já existe: ${email}`)
     return true
   }
@@ -62,30 +71,34 @@ async function runInBatches<T>(tasks: (() => Promise<T>)[], batchSize: number): 
 }
 
 async function main() {
-  console.log(`\nSeed de usuários de teste — ${BASE_URL}\n`)
+  const end = START + COUNT - 1
+  console.log(`\nSeed de usuários de teste — ${BASE_URL}`)
+  console.log(`Criando usuários ${START} a ${end} (${COUNT} usuários)\n`)
+
+  const indices = Array.from({ length: COUNT }, (_, i) => START + i)
 
   const createResults = await runInBatches(
-    Array.from({ length: TOTAL_USERS }, (_, i) => () => createUser(i + 1)),
+    indices.map(i => () => createUser(i)),
     10
   )
-  console.log(`\n${createResults.filter(Boolean).length}/${TOTAL_USERS} usuários prontos`)
+  console.log(`\n${createResults.filter(Boolean).length}/${COUNT} usuários prontos`)
 
   console.log('\nVerificando logins...')
   const loginResults = await runInBatches(
-    Array.from({ length: TOTAL_USERS }, (_, i) => () => verifyLogin(i + 1)),
+    indices.map(i => () => verifyLogin(i)),
     10
   )
   const loggedIn = loginResults.filter(Boolean).length
-  console.log(`${loggedIn}/${TOTAL_USERS} logins OK`)
+  console.log(`${loggedIn}/${COUNT} logins OK`)
 
-  if (loggedIn < TOTAL_USERS) {
+  if (loggedIn < COUNT) {
     console.error('\nAlguns usuários não conseguiram logar. Verifique os erros acima.')
     process.exit(1)
   }
 
   console.log('\nTudo pronto! Rode o teste de carga com:')
   console.log('  k6 run load-test/k6.js')
-  console.log('  k6 run --vus 50 --duration 60s load-test/k6.js')
+  console.log(`  k6 run -e VUS=${end} -e DURATION=60s load-test/k6.js`)
 }
 
 main()
