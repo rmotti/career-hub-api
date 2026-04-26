@@ -28,7 +28,7 @@
       "datasource": "InfluxDB",
       "targets": [{ "rawQuery": true, "query": "SELECT mean(\"value\") * 100 FROM \"http_req_failed\" WHERE $timeFilter" }],
       "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
-      "fieldConfig": { "defaults": { "unit": "percent", "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 5 }] } } }
+      "fieldConfig": { "defaults": { "unit": "percent", "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 1 }, { "color": "red", "value": 5 }] } } }
     },
     {
       "id": 4, "gridPos": { "x": 18, "y": 0, "w": 6, "h": 4 },
@@ -38,56 +38,170 @@
       "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
       "fieldConfig": { "defaults": { "unit": "ms", "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 1000 }, { "color": "red", "value": 2000 }] } } }
     },
+
     {
-      "id": 5, "gridPos": { "x": 0, "y": 4, "w": 24, "h": 8 },
-      "type": "timeseries", "title": "Latência por Endpoint (p95)",
+      "id": 5, "gridPos": { "x": 0, "y": 4, "w": 24, "h": 9 },
+      "type": "timeseries", "title": "Latência p95 por Endpoint",
       "datasource": "InfluxDB",
       "targets": [
-        { "rawQuery": true, "query": "SELECT percentile(\"value\", 95) FROM \"http_req_duration\" WHERE $timeFilter GROUP BY time($__interval) fill(null)", "alias": "http_req_duration p95" },
-        { "rawQuery": true, "query": "SELECT percentile(\"value\", 95) FROM \"login_duration\" WHERE $timeFilter GROUP BY time($__interval) fill(null)", "alias": "login p95" },
-        { "rawQuery": true, "query": "SELECT percentile(\"value\", 95) FROM \"list_saves_duration\" WHERE $timeFilter GROUP BY time($__interval) fill(null)", "alias": "list_saves p95" },
-        { "rawQuery": true, "query": "SELECT percentile(\"value\", 95) FROM \"create_save_duration\" WHERE $timeFilter GROUP BY time($__interval) fill(null)", "alias": "create_save p95" },
-        { "rawQuery": true, "query": "SELECT percentile(\"value\", 95) FROM \"list_players_duration\" WHERE $timeFilter GROUP BY time($__interval) fill(null)", "alias": "list_players p95" }
+        { "rawQuery": true, "query": "SELECT percentile(\"value\", 95) FROM \"login_duration\" WHERE $timeFilter GROUP BY time($__interval) fill(null)", "alias": "Login" },
+        { "rawQuery": true, "query": "SELECT percentile(\"value\", 95) FROM \"list_saves_duration\" WHERE $timeFilter GROUP BY time($__interval) fill(null)", "alias": "List Saves" },
+        { "rawQuery": true, "query": "SELECT percentile(\"value\", 95) FROM \"create_save_duration\" WHERE $timeFilter GROUP BY time($__interval) fill(null)", "alias": "Create Save" },
+        { "rawQuery": true, "query": "SELECT percentile(\"value\", 95) FROM \"list_players_duration\" WHERE $timeFilter GROUP BY time($__interval) fill(null)", "alias": "List Players" },
+        { "rawQuery": true, "query": "SELECT percentile(\"value\", 95) FROM \"create_player_duration\" WHERE $timeFilter GROUP BY time($__interval) fill(null)", "alias": "Create Player" },
+        { "rawQuery": true, "query": "SELECT percentile(\"value\", 95) FROM \"update_player_duration\" WHERE $timeFilter GROUP BY time($__interval) fill(null)", "alias": "Update Player" },
+        { "rawQuery": true, "query": "SELECT percentile(\"value\", 95) FROM \"update_player_stats_duration\" WHERE $timeFilter GROUP BY time($__interval) fill(null)", "alias": "Update Stats" },
+        { "rawQuery": true, "query": "SELECT percentile(\"value\", 95) FROM \"transfer_duration\" WHERE $timeFilter GROUP BY time($__interval) fill(null)", "alias": "Transfer" },
+        { "rawQuery": true, "query": "SELECT percentile(\"value\", 95) FROM \"advance_season_duration\" WHERE $timeFilter GROUP BY time($__interval) fill(null)", "alias": "Advance Season" },
+        { "rawQuery": true, "query": "SELECT percentile(\"value\", 95) FROM \"change_club_duration\" WHERE $timeFilter GROUP BY time($__interval) fill(null)", "alias": "Change Club" },
+        { "rawQuery": true, "query": "SELECT percentile(\"value\", 95) FROM \"team_stats_duration\" WHERE $timeFilter GROUP BY time($__interval) fill(null)", "alias": "Team Stats" },
+        { "rawQuery": true, "query": "SELECT percentile(\"value\", 95) FROM \"trophy_duration\" WHERE $timeFilter GROUP BY time($__interval) fill(null)", "alias": "Trophy" }
       ],
       "fieldConfig": { "defaults": { "unit": "ms", "custom": { "lineWidth": 2 } } }
     },
+
     {
-      "id": 6, "gridPos": { "x": 0, "y": 12, "w": 12, "h": 8 },
+      "id": 6, "gridPos": { "x": 0, "y": 13, "w": 12, "h": 8 },
       "type": "timeseries", "title": "Virtual Users ao longo do tempo",
       "datasource": "InfluxDB",
       "targets": [{ "rawQuery": true, "query": "SELECT last(\"value\") FROM \"vus\" WHERE $timeFilter GROUP BY time($__interval) fill(null)", "alias": "VUs" }],
       "fieldConfig": { "defaults": { "custom": { "lineWidth": 2, "fillOpacity": 20 }, "color": { "fixedColor": "purple", "mode": "fixed" } } }
     },
     {
-      "id": 7, "gridPos": { "x": 12, "y": 12, "w": 12, "h": 8 },
+      "id": 7, "gridPos": { "x": 12, "y": 13, "w": 12, "h": 8 },
       "type": "timeseries", "title": "Requests/s ao longo do tempo",
       "datasource": "InfluxDB",
       "targets": [{ "rawQuery": true, "query": "SELECT non_negative_derivative(max(\"value\"), 1s) FROM \"http_reqs\" WHERE $timeFilter GROUP BY time($__interval) fill(null)", "alias": "req/s" }],
       "fieldConfig": { "defaults": { "unit": "reqps", "custom": { "lineWidth": 2, "fillOpacity": 10 }, "color": { "fixedColor": "blue", "mode": "fixed" } } }
     },
+
     {
-      "id": 8, "gridPos": { "x": 0, "y": 20, "w": 8, "h": 4 },
+      "id": 8, "gridPos": { "x": 0, "y": 21, "w": 24, "h": 8 },
+      "type": "timeseries", "title": "Taxa de Erros por Operação (%)",
+      "datasource": "InfluxDB",
+      "targets": [
+        { "rawQuery": true, "query": "SELECT mean(\"value\") * 100 FROM \"login_errors\" WHERE $timeFilter GROUP BY time($__interval) fill(null)", "alias": "Login Errors" },
+        { "rawQuery": true, "query": "SELECT mean(\"value\") * 100 FROM \"create_save_errors\" WHERE $timeFilter GROUP BY time($__interval) fill(null)", "alias": "Create Save Errors" },
+        { "rawQuery": true, "query": "SELECT mean(\"value\") * 100 FROM \"create_player_errors\" WHERE $timeFilter GROUP BY time($__interval) fill(null)", "alias": "Create Player Errors" },
+        { "rawQuery": true, "query": "SELECT mean(\"value\") * 100 FROM \"transfer_errors\" WHERE $timeFilter GROUP BY time($__interval) fill(null)", "alias": "Transfer Errors" },
+        { "rawQuery": true, "query": "SELECT mean(\"value\") * 100 FROM \"advance_season_errors\" WHERE $timeFilter GROUP BY time($__interval) fill(null)", "alias": "Advance Season Errors" },
+        { "rawQuery": true, "query": "SELECT mean(\"value\") * 100 FROM \"change_club_errors\" WHERE $timeFilter GROUP BY time($__interval) fill(null)", "alias": "Change Club Errors" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "percent", "custom": { "lineWidth": 2 }, "min": 0, "color": { "mode": "palette-classic" } } }
+    },
+
+    {
+      "id": 9, "gridPos": { "x": 0, "y": 29, "w": 24, "h": 1 },
+      "type": "text", "title": "",
+      "options": { "mode": "markdown", "content": "## Leituras (Read Operations)" }
+    },
+    {
+      "id": 10, "gridPos": { "x": 0, "y": 30, "w": 6, "h": 4 },
       "type": "stat", "title": "p95 Login",
       "datasource": "InfluxDB",
       "targets": [{ "rawQuery": true, "query": "SELECT percentile(\"value\", 95) FROM \"login_duration\" WHERE $timeFilter" }],
       "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
-      "fieldConfig": { "defaults": { "unit": "ms", "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 3000 }] } } }
+      "fieldConfig": { "defaults": { "unit": "ms", "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 1500 }, { "color": "red", "value": 3000 }] } } }
     },
     {
-      "id": 9, "gridPos": { "x": 8, "y": 20, "w": 8, "h": 4 },
+      "id": 11, "gridPos": { "x": 6, "y": 30, "w": 6, "h": 4 },
       "type": "stat", "title": "p95 List Saves",
       "datasource": "InfluxDB",
       "targets": [{ "rawQuery": true, "query": "SELECT percentile(\"value\", 95) FROM \"list_saves_duration\" WHERE $timeFilter" }],
       "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
-      "fieldConfig": { "defaults": { "unit": "ms", "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1000 }] } } }
+      "fieldConfig": { "defaults": { "unit": "ms", "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 750 }, { "color": "red", "value": 1500 }] } } }
     },
     {
-      "id": 10, "gridPos": { "x": 16, "y": 20, "w": 8, "h": 4 },
+      "id": 12, "gridPos": { "x": 12, "y": 30, "w": 6, "h": 4 },
+      "type": "stat", "title": "p95 List Players",
+      "datasource": "InfluxDB",
+      "targets": [{ "rawQuery": true, "query": "SELECT percentile(\"value\", 95) FROM \"list_players_duration\" WHERE $timeFilter" }],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "fieldConfig": { "defaults": { "unit": "ms", "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 500 }, { "color": "red", "value": 1000 }] } } }
+    },
+    {
+      "id": 13, "gridPos": { "x": 18, "y": 30, "w": 6, "h": 4 },
+      "type": "stat", "title": "p95 Team Stats (GET)",
+      "datasource": "InfluxDB",
+      "targets": [{ "rawQuery": true, "query": "SELECT percentile(\"value\", 95) FROM \"team_stats_duration\" WHERE $timeFilter" }],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "fieldConfig": { "defaults": { "unit": "ms", "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 250 }, { "color": "red", "value": 500 }] } } }
+    },
+
+    {
+      "id": 14, "gridPos": { "x": 0, "y": 34, "w": 24, "h": 1 },
+      "type": "text", "title": "",
+      "options": { "mode": "markdown", "content": "## Escritas Simples (Write Operations)" }
+    },
+    {
+      "id": 15, "gridPos": { "x": 0, "y": 35, "w": 6, "h": 4 },
       "type": "stat", "title": "p95 Create Save",
       "datasource": "InfluxDB",
       "targets": [{ "rawQuery": true, "query": "SELECT percentile(\"value\", 95) FROM \"create_save_duration\" WHERE $timeFilter" }],
       "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
-      "fieldConfig": { "defaults": { "unit": "ms", "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1500 }] } } }
+      "fieldConfig": { "defaults": { "unit": "ms", "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 500 }, { "color": "red", "value": 1000 }] } } }
+    },
+    {
+      "id": 16, "gridPos": { "x": 6, "y": 35, "w": 6, "h": 4 },
+      "type": "stat", "title": "p95 Create Player",
+      "datasource": "InfluxDB",
+      "targets": [{ "rawQuery": true, "query": "SELECT percentile(\"value\", 95) FROM \"create_player_duration\" WHERE $timeFilter" }],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "fieldConfig": { "defaults": { "unit": "ms", "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 250 }, { "color": "red", "value": 500 }] } } }
+    },
+    {
+      "id": 17, "gridPos": { "x": 12, "y": 35, "w": 6, "h": 4 },
+      "type": "stat", "title": "p95 Update Player (PUT)",
+      "datasource": "InfluxDB",
+      "targets": [{ "rawQuery": true, "query": "SELECT percentile(\"value\", 95) FROM \"update_player_duration\" WHERE $timeFilter" }],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "fieldConfig": { "defaults": { "unit": "ms", "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 250 }, { "color": "red", "value": 500 }] } } }
+    },
+    {
+      "id": 18, "gridPos": { "x": 18, "y": 35, "w": 6, "h": 4 },
+      "type": "stat", "title": "p95 Update Stats (PATCH)",
+      "datasource": "InfluxDB",
+      "targets": [{ "rawQuery": true, "query": "SELECT percentile(\"value\", 95) FROM \"update_player_stats_duration\" WHERE $timeFilter" }],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "fieldConfig": { "defaults": { "unit": "ms", "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 250 }, { "color": "red", "value": 500 }] } } }
+    },
+
+    {
+      "id": 19, "gridPos": { "x": 0, "y": 39, "w": 24, "h": 1 },
+      "type": "text", "title": "",
+      "options": { "mode": "markdown", "content": "## Operações Complexas (Transactions / Season Logic)" }
+    },
+    {
+      "id": 20, "gridPos": { "x": 0, "y": 40, "w": 6, "h": 4 },
+      "type": "stat", "title": "p95 Transfer",
+      "datasource": "InfluxDB",
+      "targets": [{ "rawQuery": true, "query": "SELECT percentile(\"value\", 95) FROM \"transfer_duration\" WHERE $timeFilter" }],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "fieldConfig": { "defaults": { "unit": "ms", "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 500 }, { "color": "red", "value": 1000 }] } } }
+    },
+    {
+      "id": 21, "gridPos": { "x": 6, "y": 40, "w": 6, "h": 4 },
+      "type": "stat", "title": "p95 Advance Season",
+      "datasource": "InfluxDB",
+      "targets": [{ "rawQuery": true, "query": "SELECT percentile(\"value\", 95) FROM \"advance_season_duration\" WHERE $timeFilter" }],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "fieldConfig": { "defaults": { "unit": "ms", "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 1000 }, { "color": "red", "value": 2000 }] } } }
+    },
+    {
+      "id": 22, "gridPos": { "x": 12, "y": 40, "w": 6, "h": 4 },
+      "type": "stat", "title": "p95 Change Club",
+      "datasource": "InfluxDB",
+      "targets": [{ "rawQuery": true, "query": "SELECT percentile(\"value\", 95) FROM \"change_club_duration\" WHERE $timeFilter" }],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "fieldConfig": { "defaults": { "unit": "ms", "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 1000 }, { "color": "red", "value": 2000 }] } } }
+    },
+    {
+      "id": 23, "gridPos": { "x": 18, "y": 40, "w": 6, "h": 4 },
+      "type": "stat", "title": "p95 Trophy",
+      "datasource": "InfluxDB",
+      "targets": [{ "rawQuery": true, "query": "SELECT percentile(\"value\", 95) FROM \"trophy_duration\" WHERE $timeFilter" }],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "fieldConfig": { "defaults": { "unit": "ms", "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 250 }, { "color": "red", "value": 500 }] } } }
     }
   ]
 }
