@@ -8,6 +8,7 @@
     "preDeployCommand": ["npx prisma migrate deploy"],
     "startCommand": "npm start",
     "healthcheckPath": "/",
-    "healthcheckTimeout": 100
+    "healthcheckTimeout": 100,
+    "numReplicas": 2
   }
 }
