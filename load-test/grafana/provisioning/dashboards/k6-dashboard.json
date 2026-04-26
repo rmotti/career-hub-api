@@ -19,7 +19,7 @@
       "type": "stat", "title": "Requests/s",
       "datasource": "InfluxDB",
       "targets": [{ "rawQuery": true, "query": "SELECT count(\"value\") FROM \"http_reqs\" WHERE $timeFilter GROUP BY time(1s) fill(0)" }],
-      "options": { "reduceOptions": { "calcs": ["mean"] }, "colorMode": "value", "graphMode": "area" },
+      "options": { "reduceOptions": { "calcs": ["mean"] }, "colorMode": "value", "graphMode": "none" },
       "fieldConfig": { "defaults": { "unit": "reqps", "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "blue", "value": null }] } } }
     },
     {

@@ -87,8 +87,8 @@ export const options = {
   },
 }
 
-// Pool de 200 usuários de teste — crie com load-test/seed-users.ts
-const TEST_USERS = Array.from({ length: 200 }, (_, i) => ({
+// Pool de usuários — tamanho igual ao VUS passado, mínimo 200
+const TEST_USERS = Array.from({ length: Math.max(Number(__ENV.VUS) || 200, 200) }, (_, i) => ({
   email: `loadtest+${i + 1}@careerhub.test`,
   password: 'loadtest123',
 }))
