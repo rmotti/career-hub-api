@@ -22,6 +22,7 @@ services:
     container_name: fc26_influxdb
     environment:
       INFLUXDB_DB: k6
+      INFLUXDB_DATA_MAX_SERIES_PER_DATABASE: 0
     ports:
       - "8086:8086"
     volumes:

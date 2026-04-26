@@ -109,7 +109,7 @@
       "datasource": "InfluxDB",
       "targets": [{ "rawQuery": true, "query": "SELECT percentile(\"value\", 95) FROM \"list_saves_duration\" WHERE $timeFilter" }],
       "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
-      "fieldConfig": { "defaults": { "unit": "ms", "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 750 }, { "color": "red", "value": 1500 }] } } }
+      "fieldConfig": { "defaults": { "unit": "ms", "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 1000 }, { "color": "red", "value": 2000 }] } } }
     },
     {
       "id": 12, "gridPos": { "x": 12, "y": 30, "w": 6, "h": 4 },
@@ -125,7 +125,7 @@
       "datasource": "InfluxDB",
       "targets": [{ "rawQuery": true, "query": "SELECT percentile(\"value\", 95) FROM \"team_stats_duration\" WHERE $timeFilter" }],
       "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
-      "fieldConfig": { "defaults": { "unit": "ms", "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 750 }, { "color": "red", "value": 1500 }] } } }
+      "fieldConfig": { "defaults": { "unit": "ms", "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 1000 }, { "color": "red", "value": 2000 }] } } }
     },
 
     {
@@ -139,7 +139,7 @@
       "datasource": "InfluxDB",
       "targets": [{ "rawQuery": true, "query": "SELECT percentile(\"value\", 95) FROM \"create_save_duration\" WHERE $timeFilter" }],
       "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
-      "fieldConfig": { "defaults": { "unit": "ms", "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 500 }, { "color": "red", "value": 1000 }] } } }
+      "fieldConfig": { "defaults": { "unit": "ms", "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 750 }, { "color": "red", "value": 1500 }] } } }
     },
     {
       "id": 16, "gridPos": { "x": 6, "y": 35, "w": 6, "h": 4 },
@@ -147,7 +147,7 @@
       "datasource": "InfluxDB",
       "targets": [{ "rawQuery": true, "query": "SELECT percentile(\"value\", 95) FROM \"create_player_duration\" WHERE $timeFilter" }],
       "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
-      "fieldConfig": { "defaults": { "unit": "ms", "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 250 }, { "color": "red", "value": 500 }] } } }
+      "fieldConfig": { "defaults": { "unit": "ms", "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 1000 }, { "color": "red", "value": 2000 }] } } }
     },
     {
       "id": 17, "gridPos": { "x": 12, "y": 35, "w": 6, "h": 4 },
@@ -155,7 +155,7 @@
       "datasource": "InfluxDB",
       "targets": [{ "rawQuery": true, "query": "SELECT percentile(\"value\", 95) FROM \"update_player_duration\" WHERE $timeFilter" }],
       "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
-      "fieldConfig": { "defaults": { "unit": "ms", "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 250 }, { "color": "red", "value": 500 }] } } }
+      "fieldConfig": { "defaults": { "unit": "ms", "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 1000 }, { "color": "red", "value": 2000 }] } } }
     },
     {
       "id": 18, "gridPos": { "x": 18, "y": 35, "w": 6, "h": 4 },
@@ -163,7 +163,7 @@
       "datasource": "InfluxDB",
       "targets": [{ "rawQuery": true, "query": "SELECT percentile(\"value\", 95) FROM \"update_player_stats_duration\" WHERE $timeFilter" }],
       "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
-      "fieldConfig": { "defaults": { "unit": "ms", "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 250 }, { "color": "red", "value": 500 }] } } }
+      "fieldConfig": { "defaults": { "unit": "ms", "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 1000 }, { "color": "red", "value": 2000 }] } } }
     },
 
     {
@@ -177,7 +177,7 @@
       "datasource": "InfluxDB",
       "targets": [{ "rawQuery": true, "query": "SELECT percentile(\"value\", 95) FROM \"transfer_duration\" WHERE $timeFilter" }],
       "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
-      "fieldConfig": { "defaults": { "unit": "ms", "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 500 }, { "color": "red", "value": 1000 }] } } }
+      "fieldConfig": { "defaults": { "unit": "ms", "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 1000 }, { "color": "red", "value": 2000 }] } } }
     },
     {
       "id": 21, "gridPos": { "x": 6, "y": 40, "w": 6, "h": 4 },
@@ -185,7 +185,7 @@
       "datasource": "InfluxDB",
       "targets": [{ "rawQuery": true, "query": "SELECT percentile(\"value\", 95) FROM \"advance_season_duration\" WHERE $timeFilter" }],
       "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
-      "fieldConfig": { "defaults": { "unit": "ms", "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 1000 }, { "color": "red", "value": 2000 }] } } }
+      "fieldConfig": { "defaults": { "unit": "ms", "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 1250 }, { "color": "red", "value": 2500 }] } } }
     },
     {
       "id": 22, "gridPos": { "x": 12, "y": 40, "w": 6, "h": 4 },
@@ -193,7 +193,7 @@
       "datasource": "InfluxDB",
       "targets": [{ "rawQuery": true, "query": "SELECT percentile(\"value\", 95) FROM \"change_club_duration\" WHERE $timeFilter" }],
       "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
-      "fieldConfig": { "defaults": { "unit": "ms", "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 1000 }, { "color": "red", "value": 2000 }] } } }
+      "fieldConfig": { "defaults": { "unit": "ms", "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 1250 }, { "color": "red", "value": 2500 }] } } }
     },
     {
       "id": 23, "gridPos": { "x": 18, "y": 40, "w": 6, "h": 4 },
@@ -201,7 +201,7 @@
       "datasource": "InfluxDB",
       "targets": [{ "rawQuery": true, "query": "SELECT percentile(\"value\", 95) FROM \"trophy_duration\" WHERE $timeFilter" }],
       "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
-      "fieldConfig": { "defaults": { "unit": "ms", "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 250 }, { "color": "red", "value": 500 }] } } }
+      "fieldConfig": { "defaults": { "unit": "ms", "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 1250 }, { "color": "red", "value": 2500 }] } } }
     }
   ]
 }
