@@ -22,6 +22,7 @@
 - [Variáveis de Ambiente](#variáveis-de-ambiente)
 - [Scripts](#scripts)
 - [Estrutura de Pastas](#estrutura-de-pastas)
+- [CI/CD](#cicd)
 - [Deploy](#deploy)
 
 ---
@@ -351,7 +352,7 @@ src/
 │   └── utils/            # Helpers, error handling, auth hooks
 ├── types/                # Tipos globais TypeScript
 ├── app.ts                # Fastify — plugins, rotas, error handler
-└── server.ts             # Entry point (listen local ou handler Vercel)
+└── server.ts             # Entry point da API
 prisma/
 ├── schema.prisma         # Schema do banco
 ├── seed.ts               # Seed principal
@@ -363,17 +364,138 @@ skills/                   # Skills do Claude Code para este projeto
 
 ---
 
+## CI/CD
+
+O projeto deve usar **GitHub Actions para CI** e **Railway para CD**.
+
+### Estratégia recomendada
+
+1. **CI em pull requests e pushes para `main`**
+   - Instalar dependências com `npm ci`
+   - Gerar Prisma Client via `postinstall`
+   - Validar TypeScript com `npm run build`
+   - Rodar testes com `npm test` quando a suíte de testes for adicionada
+
+2. **Testes automatizados**
+   - Começar com testes unitários de helpers e services sem dependência externa
+   - Adicionar testes HTTP com `app.inject()` do Fastify para rotas críticas
+   - Adicionar testes de integração com PostgreSQL e Redis via service containers do GitHub Actions
+
+3. **Migrations**
+   - Em desenvolvimento, usar `npm run db:migrate`
+   - Em produção, usar `npx prisma migrate deploy`
+   - Evitar `prisma migrate dev` em ambientes remotos
+
+4. **CD pelo Railway**
+   - Railway deve acompanhar a branch de produção do GitHub
+   - O deploy deve acontecer somente depois do merge na branch configurada
+   - As variáveis sensíveis devem ficar no painel do Railway, não no repositório
+
+### Plano de implementação
+
+#### Fase 1 — CI mínimo
+
+Criar `.github/workflows/ci.yml` com:
+
+```yaml
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm run build
+```
+
+#### Fase 2 — Base de testes
+
+Adicionar um framework de testes, preferencialmente Vitest, e criar scripts:
+
+```json
+{
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  }
+}
+```
+
+Depois atualizar o workflow para executar:
+
+```bash
+npm test
+```
+
+#### Fase 3 — Testes de integração
+
+Adicionar um job separado com PostgreSQL e Redis:
+
+- PostgreSQL compatível com o ambiente local (`postgres:16-alpine`)
+- Redis compatível com o ambiente local (`redis:7-alpine`)
+- `DATABASE_URL`, `DIRECT_URL`, `REDIS_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL` e `TRUSTED_ORIGINS` definidos apenas para o job
+- `npx prisma migrate deploy` antes dos testes de integração
+
+#### Fase 4 — CD Railway
+
+Configurar no Railway:
+
+- Repositório GitHub conectado
+- Branch de produção definida
+- Variáveis de ambiente configuradas
+- Build command: `npm run build`
+- Start command: `npm start`
+
+Se as migrations forem automatizadas no deploy, usar:
+
+```bash
+npx prisma migrate deploy && npm start
+```
+
+---
+
 ## Deploy
 
-### Vercel
+### Railway
 
-A API está configurada para rodar como Serverless Function na Vercel via `src/server.ts`.
+A API está hospedada no Railway.
 
-1. Conecte o repositório na Vercel
-2. Configure as variáveis de ambiente no painel
-3. Defina o comando de build: `npm run build`
-4. Rode as migrations antes do primeiro deploy:
+1. Conecte o repositório GitHub no Railway
+2. Configure a branch de produção
+3. Configure as variáveis de ambiente no painel do Railway
+4. Defina o comando de build:
+
+```bash
+npm run build
+```
+
+5. Defina o comando de start:
+
+```bash
+npm start
+```
+
+6. Aplique migrations em produção com:
 
 ```bash
 npx prisma migrate deploy
 ```
+
+> Se preferir automatizar migrations no deploy, use `npx prisma migrate deploy && npm start` como start command. Faça isso apenas se o projeto aceitar que cada deploy tente aplicar migrations pendentes antes de iniciar a API.
