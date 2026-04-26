@@ -6,6 +6,7 @@
 ![Prisma](https://img.shields.io/badge/Prisma-5+-2D3748?logo=prisma&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Neon-336791?logo=postgresql&logoColor=white)
 ![Redis](https://img.shields.io/badge/Redis-ioredis-DC382D?logo=redis&logoColor=white)
+![CI](https://github.com/rmotti/career-hub-api/actions/workflows/ci.yml/badge.svg)
 
 > API para rastreamento de Career Mode do FC 26. Gerencie saves de carreira, elenco, estatísticas por temporada, transferências, troféus e passagens por clubes.
 
@@ -22,6 +23,7 @@
 - [Variáveis de Ambiente](#variáveis-de-ambiente)
 - [Scripts](#scripts)
 - [Estrutura de Pastas](#estrutura-de-pastas)
+- [Testes de Carga](#testes-de-carga)
 - [CI/CD](#cicd)
 - [Deploy](#deploy)
 
@@ -58,7 +60,7 @@ Preencha as variáveis conforme a seção [Variáveis de Ambiente](#variáveis-d
 
 ## Banco de Dados
 
-**ORM**: Prisma  
+**ORM**: Prisma
 **Banco**: PostgreSQL (Neon)
 
 ### Migrations
@@ -291,7 +293,7 @@ Documentação interativa (Swagger): `http://localhost:3333/docs`
 
 ## Autenticação
 
-A API utiliza **Better Auth** com sessão via token de portador.
+A API utiliza **Better Auth** com sessão via token de portador. A sessão é cacheada no Redis por 5 minutos após a primeira validação.
 
 Inclua o token em todas as rotas protegidas:
 
@@ -299,7 +301,7 @@ Inclua o token em todas as rotas protegidas:
 Authorization: Bearer <token>
 ```
 
-O token é obtido em `POST /api/auth/sign-in/email` e validado via `GET /api/auth/session`.
+O token é obtido em `POST /api/auth/sign-in/email`.
 
 ---
 
@@ -314,6 +316,7 @@ O token é obtido em `POST /api/auth/sign-in/email` e validado via `GET /api/aut
 | `TRUSTED_ORIGINS` | Origens permitidas para CORS (separadas por vírgula) | ✅ |
 | `REDIS_URL` | URL de conexão com Redis | ✅ |
 | `PORT` | Porta do servidor | ❌ (padrão: `3333`) |
+| `DISABLE_RATE_LIMIT` | Desabilita o rate limiter do Better Auth (`true`) — usar apenas em load tests | ❌ |
 
 ---
 
@@ -323,6 +326,7 @@ O token é obtido em `POST /api/auth/sign-in/email` e validado via `GET /api/aut
 npm run dev                   # dev com hot reload (tsx watch)
 npm run build                 # compila TypeScript para dist/
 npm start                     # inicia em produção (node dist/server.js)
+npm test                      # roda testes com Vitest
 npm run db:migrate            # cria e aplica migration (dev)
 npm run db:generate           # regenera Prisma Client
 npm run db:seed               # seed principal
@@ -339,145 +343,100 @@ npm run db:studio             # abre Prisma Studio
 src/
 ├── features/
 │   ├── auth/             # Autenticação (Better Auth)
-│   ├── clubs/            # Lista de clubes disponíveis
+│   ├── clubs/            # Lista de clubes disponíveis (in-memory)
 │   ├── club-stints/      # Passagens por clubes
-│   ├── competitions/     # Competições (liga, copa, europeia)
+│   ├── competitions/     # Competições (liga, copa, europeia) — cacheadas 24h
 │   ├── players/          # Elenco e stats de jogadores
 │   ├── saves/            # Saves de carreira
 │   ├── team-stats/       # Estatísticas da equipe por competição
 │   ├── transfers/        # Transferências
 │   └── trophies/         # Troféus
 ├── shared/
-│   ├── lib/              # Instâncias compartilhadas (Prisma, Redis)
-│   └── utils/            # Helpers, error handling, auth hooks
+│   ├── lib/
+│   │   ├── auth.ts       # Instância do Better Auth
+│   │   ├── prisma.ts     # Singleton do Prisma (connection_limit=20)
+│   │   └── redis.ts      # Instância do ioredis
+│   └── utils/
+│       ├── auth-hooks.ts # requireAuth, requireRole, requirePlan
+│       ├── cache.ts      # cacheGet / cacheSet / cacheInvalidate
+│       ├── currency.ts   # Formatação de valores monetários
+│       └── errors.ts     # AppError, NotFoundError
 ├── types/                # Tipos globais TypeScript
 ├── app.ts                # Fastify — plugins, rotas, error handler
-└── server.ts             # Entry point da API
+└── server.ts             # Entry point
 prisma/
-├── schema.prisma         # Schema do banco
-├── seed.ts               # Seed principal
-├── seed-competitions.ts  # Seed de competições
-└── migrate-data.ts       # Migração de dados legados
-skills/                   # Skills do Claude Code para este projeto
-└── docs/                 # Skill de documentação (gera/atualiza este README)
+├── schema.prisma
+├── seed.ts
+├── seed-competitions.ts
+└── migrate-data.ts
+load-test/
+├── k6.js                 # Script de carga (k6)
+└── seed-users.ts         # Cria 200 usuários de teste
 ```
+
+---
+
+## Testes de Carga
+
+O projeto inclui testes de carga com [k6](https://k6.io) integrados ao Grafana + InfluxDB.
+
+### Pré-requisitos
+
+```bash
+docker compose up -d influxdb grafana
+```
+
+### Criar usuários de teste
+
+```bash
+npx tsx load-test/seed-users.ts --base-url https://ample-love-production.up.railway.app
+```
+
+### Rodar o teste
+
+```bash
+k6 run \
+  --out influxdb=http://localhost:8086/k6 \
+  -e BASE_URL=https://ample-love-production.up.railway.app \
+  -e VUS=200 \
+  -e DURATION=60s \
+  load-test/k6.js
+```
+
+Dashboard Grafana disponível em `http://localhost:3000`.
+
+> Para testes de carga em produção, configure `DISABLE_RATE_LIMIT=true` nas variáveis de ambiente do servidor.
 
 ---
 
 ## CI/CD
 
-O projeto deve usar **GitHub Actions para CI** e **Railway para CD**.
+### CI — GitHub Actions
 
-### Estratégia recomendada
+O pipeline roda a cada push na `main`:
 
-1. **CI em pushes para `main`**
-   - Instalar dependências com `npm ci`
-   - Gerar Prisma Client via `postinstall`
-   - Validar TypeScript com `npm run build`
-   - Rodar testes com `npm test`
+1. `npm ci` — instala dependências
+2. `npm run build` — valida TypeScript
+3. `npm test` — executa testes com Vitest
 
-2. **Testes automatizados**
-   - Começar com testes unitários de helpers e services sem dependência externa
-   - Adicionar testes HTTP com `app.inject()` do Fastify para rotas críticas
-   - Adicionar testes de integração com PostgreSQL e Redis via service containers do GitHub Actions
+### CD — Railway
 
-3. **Migrations**
-   - Em desenvolvimento, usar `npm run db:migrate`
-   - Em produção, usar `npx prisma migrate deploy`
-   - Evitar `prisma migrate dev` em ambientes remotos
+Deploy automático a partir de pushes na `main`. O `railway.json` define:
 
-4. **CD pelo Railway**
-   - Railway deve acompanhar a branch de produção do GitHub
-   - O deploy deve acontecer a partir dos pushes na branch `main`
-   - `railway.json` define build, migration antes do deploy, start e healthcheck
-   - As variáveis sensíveis devem ficar no painel do Railway, não no repositório
-
-### Plano de implementação
-
-#### Fase 1 — CI com build e testes
-
-Criar `.github/workflows/ci.yml` para rodar em todo push na `main`:
-
-```yaml
-name: CI
-
-on:
-  push:
-    branches:
-      - main
-
-permissions:
-  contents: read
-
-jobs:
-  build-and-test:
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 22
-          cache: npm
-
-      - run: npm ci
-      - run: npm run build
-      - run: npm test
-```
-
-#### Fase 2 — Base de testes
-
-Adicionar Vitest e criar scripts:
-
-```json
-{
-  "scripts": {
-    "test": "vitest run",
-    "test:watch": "vitest"
-  }
-}
-```
-
-Os primeiros testes cobrem helpers e services sem dependência de PostgreSQL ou Redis.
-
-#### Fase 3 — Testes de integração
-
-Adicionar um job separado com PostgreSQL e Redis:
-
-- PostgreSQL compatível com o ambiente local (`postgres:16-alpine`)
-- Redis compatível com o ambiente local (`redis:7-alpine`)
-- `DATABASE_URL`, `DIRECT_URL`, `REDIS_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL` e `TRUSTED_ORIGINS` definidos apenas para o job
-- `npx prisma migrate deploy` antes dos testes de integração
-
-#### Fase 4 — CD Railway
-
-Configurar no Railway:
-
-- Repositório GitHub conectado
-- Branch de produção definida
-- Variáveis de ambiente configuradas
-- Configuração do deploy versionada em `railway.json`
-
-O arquivo `railway.json` define:
-
-- Build command: `npm run build`
-- Pre-deploy command: `npx prisma migrate deploy`
-- Start command: `npm start`
-- Healthcheck path: `/`
+- **Build**: `npm run build`
+- **Pre-deploy**: `npx prisma migrate deploy`
+- **Start**: `npm start`
+- **Healthcheck**: `/`
 
 ---
 
 ## Deploy
 
-### Railway
-
-A API está hospedada no Railway.
+A API está hospedada no **Railway** (`https://ample-love-production.up.railway.app`).
 
 1. Conecte o repositório GitHub no Railway
-2. Configure a branch de produção
-3. Configure as variáveis de ambiente no painel do Railway
-4. O Railway usa `railway.json` para aplicar build, pre-deploy migration, start e healthcheck
+2. Configure as variáveis de ambiente no painel do Railway
+3. O Railway aplica o `railway.json` automaticamente a cada push
 
 As migrations de produção rodam no pre-deploy:
 

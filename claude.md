@@ -1,16 +1,73 @@
-# Agente de análise de performance — Fastify/TypeScript
+# CLAUDE.md
 
-Você é um engenheiro sênior especializado em performance de APIs Node.js/TypeScript com Fastify. Sua função é realizar uma análise técnica completa desta API e identificar gargalos de performance que causam lentidão perceptível no frontend.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-Você tem acesso a três fontes de informação:
-1. Código-fonte da API (rotas, plugins, hooks, services, queries) — disponível no filesystem deste projeto
-2. Requisições HTTP reais com medição de tempo de resposta — execute com curl
-3. Contrato da API (OpenAPI/Swagger) — procure em arquivos de schema ou rota registrada no Fastify
+## Commands
 
-Ao analisar, você deve:
-- Ser objetivo e técnico, sem achismos
-- Basear cada problema identificado em evidência concreta (trecho de código, métrica, contrato)
-- Priorizar problemas pelo impacto real no tempo de resposta sentido pelo usuário
-- Propor soluções aplicáveis ao stack Fastify + TypeScript
+```bash
+npm run dev          # dev server with hot reload (tsx watch + .env.local)
+npm run build        # compile TypeScript to dist/
+npm start            # production (node dist/server.js)
+npm test             # run tests with Vitest
+npm run db:migrate   # create and apply migration (dev only)
+npm run db:generate  # regenerate Prisma Client after schema changes
+npm run db:seed      # seed clubs/base data
+npm run db:seed-competitions  # seed competitions table
+npm run db:studio    # Prisma Studio
+```
 
-Nunca invente problemas sem evidência. Se uma área não puder ser avaliada com as informações disponíveis, informe explicitamente.
+Run a single test file:
+```bash
+npx vitest run src/features/clubs/__tests__/clubs.service.test.ts
+```
+
+Local dev requires `.env.local` (copy from `.env.example`). Docker Compose provides Postgres + Redis:
+```bash
+docker compose up -d db redis
+```
+
+## Architecture
+
+Feature-based structure: each domain lives in `src/features/<name>/` with three files — `routes.ts` (Fastify schema + handler wiring), `controller.ts` (request/response extraction), `service.ts` (business logic + Prisma queries).
+
+**Request flow:** `app.ts` → route plugin → `preHandler: requireAuth()` → controller → service → Prisma/Redis.
+
+**Auth** (`src/shared/lib/auth.ts`): Better Auth with bearer token. `requireAuth()` in `src/shared/utils/auth-hooks.ts` resolves the session via `auth.api.getSession()` and caches it in Redis for 5 minutes under key `session:<token>`. All protected routes are registered inside a single scoped plugin in `app.ts` that adds this hook once.
+
+**Cache** (`src/shared/utils/cache.ts`): Redis via ioredis. Pattern: `cacheGet` → query → `cacheSet`. Silent failure — cache errors never break the main flow. Use `cacheInvalidate` for point invalidation and `cacheInvalidatePattern` (SCAN-based) sparingly. TTLs are defined per-service as a `TTL` const object.
+
+**Prisma** (`src/shared/lib/prisma.ts`): singleton with `connection_limit=20&pool_timeout=20` appended to `DATABASE_URL`. The `directUrl` env var is the direct Neon connection used only for migrations (bypasses PgBouncer).
+
+## Domain model
+
+`Save` = one FC 26 career. `ClubStint` = a spell at one club within a save (`isCurrent: true` = active club). `Player` has `activeClubStintId` pointing to the current stint (null = released/loaned out). `PlayerSeasonStats` and `TeamSeasonStats` are created per season when `PATCH /saves/:id` advances `currentSeason`.
+
+Clubs are **in-memory** in `clubs.service.ts` (no DB table). Competitions are in the DB but cached 24h in Redis.
+
+`salary` is stored in thousands of € (75 = €75K). `marketValue` and `budget`/`balance` are in millions of € (100 = €100M). Formatting helpers are in `src/shared/utils/currency.ts`.
+
+## Key conventions
+
+- Fastify route schemas define request validation (body, params, querystring) inline in `routes.ts`. Response schemas are not yet defined — adding them enables fast-json-stringify serialization.
+- `AppError(message, statusCode)` for expected errors; `NotFoundError` is a subclass. The global error handler in `app.ts` also catches `PrismaClientKnownRequestError` codes P2025, P2003, P2002.
+- `DISABLE_RATE_LIMIT=true` env var disables Better Auth's rate limiter — set this on Railway when running load tests, never in production traffic.
+
+## Load testing
+
+Seed 200 test users before running:
+```bash
+npx tsx load-test/seed-users.ts --base-url https://ample-love-production.up.railway.app
+```
+
+Run k6 test:
+```bash
+k6 run --out influxdb=http://localhost:8086/k6 -e BASE_URL=https://ample-love-production.up.railway.app -e VUS=200 -e DURATION=60s load-test/k6.js
+```
+
+Grafana dashboard at `http://localhost:3000`. Start InfluxDB + Grafana with `docker compose up -d influxdb grafana`.
+
+## Deployment
+
+Production runs on **Railway** (`railway.json`). Pre-deploy command runs `npx prisma migrate deploy`. Database is **Neon** (PostgreSQL serverless). Redis is a Railway service.
+
+The repo also has a `vercel.json` for Vercel compatibility, but production is Railway.
