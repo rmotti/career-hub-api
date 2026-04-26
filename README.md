@@ -1,277 +1,238 @@
-# FC 26 Career Mode Hub — API
+# FC 26 Career Hub — API
 
-Backend REST para tracking de Career Mode do FC 26. Registre sua carreira com detalhes completos: clubes, elenco, estatísticas por temporada, transferências e troféus — tudo persistido e consultável via API.
+![Node.js](https://img.shields.io/badge/Node.js-22+-339933?logo=node.js&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-5+-3178C6?logo=typescript&logoColor=white)
+![Fastify](https://img.shields.io/badge/Fastify-4+-000000?logo=fastify&logoColor=white)
+![Prisma](https://img.shields.io/badge/Prisma-5+-2D3748?logo=prisma&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Neon-336791?logo=postgresql&logoColor=white)
+![Redis](https://img.shields.io/badge/Redis-ioredis-DC382D?logo=redis&logoColor=white)
 
----
-
-## Stack
-
-| Camada | Tecnologia |
-|---|---|
-| Runtime | Node.js |
-| Linguagem | TypeScript (strict) |
-| Framework | Fastify v4 |
-| ORM | Prisma v5 |
-| Banco de dados | PostgreSQL |
-| Documentação | Swagger UI (`@fastify/swagger-ui`) |
-| Infra local | Docker + docker-compose |
+> API para rastreamento de Career Mode do FC 26. Gerencie saves de carreira, elenco, estatísticas por temporada, transferências, troféus e passagens por clubes.
 
 ---
 
-## Funcionalidades
+## Índice
 
-- **Múltiplos saves** — gerencie carreiras diferentes em paralelo
-- **Histórico de clubes** — registre cada passagem com anos de início e fim
-- **Elenco ativo** — controle quais jogadores estão no clube atual
-- **Stats por temporada** — tanto individuais (gols, assistências, cartões) quanto da equipe (vitórias, posse, gols pro/contra, posição na liga, resultado nas copas)
-- **Orçamento e saldo** — `budget` fixo por temporada; `balance` atualizado automaticamente a cada compra ou venda
-- **Avanço de temporada automático** — ao atualizar `currentSeason`, a API cria registros de stats vazios para todos os jogadores ativos e para a equipe
-- **Troféus automáticos** — ao avançar de temporada, troféus são criados automaticamente se `leaguePosition === 1`, `europeanCupResult === "Campeao"` ou `nationalCupResult === "Campeao"`
-- **Transferências** — compras reativam/criam jogadores no elenco e debitam o `balance`; vendas desvinculam e creditam o `balance`
-- **Formato de moeda normalizado** — `salary` e `marketValue` seguem o padrão `€750K` / `€1.5M`
-- **Validações** — JSON Schema integrado ao Fastify (idade, OVR, posse, enums de posição/status/cupResult, padrão de moeda)
-- **Swagger UI** — documentação interativa em `/docs`
-
----
-
-## Diagrama de dados
-
-```
-Save ──< ClubStint ──< TeamSeasonStats
-  |           |──< Trophy
-  |           |──< PlayerSeasonStats >── Player
-  |                                         |
-  └──< Player                               |
-  └──< Transfer >──────────────────────────┘
-```
-
-- Um **Save** possui várias passagens por clubes (`ClubStint`), jogadores e transferências
-- Apenas um `ClubStint` tem `isCurrent: true` por vez
-- `PlayerSeasonStats` conecta um jogador a um stint e a uma temporada específica
-- `Transfer` pode ou não referenciar um `Player` existente
-- `budget` é o orçamento original da temporada e nunca muda; `balance` flutua conforme as transferências
+- [Pré-requisitos](#pré-requisitos)
+- [Instalação](#instalação)
+- [Configuração](#configuração)
+- [Banco de Dados](#banco-de-dados)
+- [Rotas da API](#rotas-da-api)
+- [Autenticação](#autenticação)
+- [Variáveis de Ambiente](#variáveis-de-ambiente)
+- [Scripts](#scripts)
+- [Estrutura de Pastas](#estrutura-de-pastas)
+- [Deploy](#deploy)
 
 ---
 
 ## Pré-requisitos
 
-- [Node.js](https://nodejs.org) 20+
-- [Docker](https://www.docker.com/) (para o banco local)
+- Node.js >= 22
+- npm
+- PostgreSQL (recomendado: [Neon](https://neon.tech))
+- Redis (local ou gerenciado)
 
 ---
 
-## Instalação e execução
+## Instalação
 
 ```bash
-# 1. Clone o repositório
-git clone <repo-url>
-cd fc26-career-hub-api
-
-# 2. Instale as dependências
+git clone https://github.com/rmotti/career-hub-api
+cd career-hub-api
 npm install
-
-# 3. Configure as variáveis de ambiente
-cp .env.example .env
-# edite o .env se necessário (padrão já aponta para o Docker local)
-
-# 4. Suba o banco de dados
-docker compose up -d
-
-# 5. Execute as migrations
-npm run db:migrate
-
-# 6. (Opcional) Popule com dados de exemplo
-npm run db:seed
-
-# 7. Inicie o servidor em modo desenvolvimento
-npm run dev
 ```
 
-A API estará disponível em `http://localhost:3333`.
-A documentação Swagger em `http://localhost:3333/docs`.
+---
+
+## Configuração
+
+```bash
+cp .env.example .env.local
+```
+
+Preencha as variáveis conforme a seção [Variáveis de Ambiente](#variáveis-de-ambiente).
 
 ---
 
-## Variáveis de ambiente
+## Banco de Dados
 
-| Variável | Descrição | Exemplo |
-|---|---|---|
-| `DATABASE_URL` | URL do banco (pooler se usar Neon) | `postgresql://fc26:fc26@localhost:5432/fc26_career_hub` |
-| `DIRECT_URL` | URL direta (obrigatória para migrations no Neon) | igual à `DATABASE_URL` para uso local |
-| `PORT` | Porta do servidor | `3333` |
+**ORM**: Prisma  
+**Banco**: PostgreSQL (Neon)
 
----
+### Migrations
 
-## Scripts
+```bash
+npm run db:migrate           # cria e aplica migration (dev)
+npx prisma migrate deploy    # aplica migrations em produção
+```
 
-| Comando | Descrição |
+### Seed
+
+```bash
+npm run db:seed               # seed principal (clubes, etc.)
+npm run db:seed-competitions  # seed de competições
+npm run db:migrate-data       # migração de dados legados
+```
+
+### Studio
+
+```bash
+npm run db:studio
+```
+
+### Models
+
+| Model | Descrição |
 |---|---|
-| `npm run dev` | Inicia em modo watch (tsx) |
-| `npm run build` | Compila TypeScript para `dist/` |
-| `npm run start` | Executa o build compilado |
-| `npm run db:migrate` | Cria/atualiza tabelas no banco |
-| `npm run db:generate` | Regenera o Prisma Client |
-| `npm run db:seed` | Insere dados de exemplo |
-| `npm run db:studio` | Abre o Prisma Studio (GUI do banco) |
+| `User` | Usuário autenticado (Better Auth) |
+| `Session` / `Account` / `Verification` | Modelos de sessão do Better Auth |
+| `Save` | Uma carreira no FC 26 |
+| `ClubStint` | Passagem por um clube dentro de um save |
+| `Player` | Jogador do elenco |
+| `PlayerSeasonStats` | Estatísticas do jogador por temporada/clube |
+| `PlayerOvrHistory` | Histórico de overall do jogador por temporada |
+| `TeamSeasonStats` | Estatísticas da equipe por competição e temporada |
+| `Transfer` | Transferência de entrada ou saída |
+| `Trophy` | Troféu conquistado vinculado ao ClubStint |
+| `Competition` | Competição (liga, copa nacional, europeia, supercopa) |
 
 ---
 
-## Formato de moeda
+## Rotas da API
 
-Todos os campos monetários (`salary`, `marketValue`, `budget`, `balance`, `fee`) seguem o padrão:
+Base URL: `http://localhost:3333/api`
 
-| Valor | Formato |
-|---|---|
-| Abaixo de 1.000.000 | `€750K`, `€100K` |
-| A partir de 1.000.000 | `€1.5M`, `€35M`, `€100M` |
+Documentação interativa (Swagger): `http://localhost:3333/docs`
 
-- Prefixo `€` obrigatório
-- Sufixo `K` (milhares) ou `M` (milhões) obrigatório, maiúsculo
-- Exemplos válidos: `€750K`, `€1.5M`, `€85M`, `€100K`
-- Exemplos inválidos: `750000`, `35M`, `€35m`, `£80M`
-
----
-
-## Endpoints
-
-### Clubs
+### Auth — Pública
 
 | Método | Rota | Descrição |
 |---|---|---|
-| GET | `/api/clubs` | Lista todos os clubes disponíveis |
+| `POST` | `/auth/sign-up/email` | Cadastrar novo usuário |
+| `POST` | `/auth/sign-in/email` | Login com e-mail e senha |
+| `GET` | `/auth/session` | Verificar sessão ativa |
+| `POST` | `/auth/sign-out` | Encerrar sessão |
 
----
-
-### Saves
+### Clubs — 🔒 Requer sessão
 
 | Método | Rota | Descrição |
 |---|---|---|
-| GET | `/api/saves` | Lista todos os saves com `currentClubStint` |
-| GET | `/api/saves/:saveId` | Busca save com todos os `clubStints` |
-| POST | `/api/saves` | Cria save + ClubStint inicial + TeamSeasonStats |
-| PATCH | `/api/saves/:saveId` | Atualiza save; avança temporada se `currentSeason` mudar |
-| DELETE | `/api/saves/:saveId` | Remove save e todos os dados (cascade) |
+| `GET` | `/clubs` | Listar todos os clubes disponíveis |
+| `GET` | `/clubs/by-league` | Listar clubes agrupados por liga |
 
-**POST `/api/saves` — body:**
+### Competitions — 🔒 Requer sessão
+
+| Método | Rota | Descrição |
+|---|---|---|
+| `GET` | `/competitions` | Listar todas as competições |
+| `GET` | `/competitions/european` | Listar competições europeias |
+
+### Saves — 🔒 Requer sessão
+
+| Método | Rota | Descrição |
+|---|---|---|
+| `GET` | `/saves` | Listar saves do usuário |
+| `GET` | `/saves/:saveId` | Buscar save por ID |
+| `POST` | `/saves` | Criar novo save |
+| `PATCH` | `/saves/:saveId` | Atualizar save (avançar temporada, budget, europeia) |
+| `DELETE` | `/saves/:saveId` | Deletar save e todos os dados relacionados |
+
+**POST `/saves` — body:**
 ```json
 {
   "name": "Minha Carreira",
   "club": "Liverpool",
-  "budget": "€100M"
+  "budget": 100,
+  "europeanCompetitionId": "uuid-opcional"
 }
 ```
+> `budget` em milhões de €: `100` = €100M. O `balance` inicial é igual ao `budget`.
 
-> `budget` é obrigatório. O `balance` inicial é automaticamente igual ao `budget`.
-
-**PATCH `/api/saves/:saveId` — body:**
+**PATCH `/saves/:saveId` — body:**
 ```json
 {
   "currentYear": 2027,
   "currentSeason": "2027/28",
-  "budget": "€80M",
-  "balance": "€12M"
+  "budget": 80,
+  "balance": 12,
+  "europeanCompetitionId": "uuid-ou-null"
 }
 ```
+> Ao alterar `currentSeason`, a API cria `TeamSeasonStats` por competição, `PlayerSeasonStats` para todos os jogadores ativos e verifica troféus da temporada encerrada.
 
-> Ao alterar `currentSeason`, a API:
-> 1. Verifica os `TeamSeasonStats` da temporada que está encerrando
-> 2. Cria troféus automaticamente conforme os resultados (ver [Troféus automáticos](#troféus-automáticos))
-> 3. Cria `TeamSeasonStats` e `PlayerSeasonStats` vazios para a nova temporada
-
----
-
-### Club Stints
+### Club Stints — 🔒 Requer sessão
 
 | Método | Rota | Descrição |
 |---|---|---|
-| GET | `/api/saves/:saveId/club-stints` | Lista todas as passagens |
-| GET | `/api/saves/:saveId/club-stints/current` | Retorna o clube atual |
-| POST | `/api/saves/:saveId/club-stints` | Muda de clube (transação) |
-| PATCH | `/api/saves/:saveId/club-stints/:stintId` | Edita dados da passagem |
+| `GET` | `/saves/:saveId/club-stints` | Listar passagens por clubes |
+| `GET` | `/saves/:saveId/club-stints/current` | Buscar clube atual (`isCurrent: true`) |
+| `POST` | `/saves/:saveId/club-stints` | Mudar de clube (fecha stint atual, abre novo em transação) |
+| `PATCH` | `/saves/:saveId/club-stints/:stintId` | Atualizar dados da passagem |
 
-**POST** — muda de clube em transação: fecha o stint anterior, desvincula jogadores, abre novo stint e cria TeamSeasonStats.
-
+**POST — body:**
 ```json
-{ "club": "Real Madrid" }
+{
+  "club": "Real Madrid",
+  "europeanCompetitionId": "uuid-opcional"
+}
 ```
+> Operação em transação: fecha o stint anterior, desvincula todos os jogadores e cria `TeamSeasonStats` para as competições do novo clube.
 
----
-
-### Players
+### Players — 🔒 Requer sessão
 
 | Método | Rota | Descrição |
 |---|---|---|
-| GET | `/api/saves/:saveId/players` | Todos os jogadores com `totalStats` acumulado |
-| GET | `/api/saves/:saveId/players?active=true` | Apenas elenco ativo com stats da temporada atual |
-| GET | `/api/saves/:saveId/players/:playerId` | Jogador com `totalStats` e `history` por clube/temporada |
-| POST | `/api/saves/:saveId/players` | Adiciona jogador ao elenco |
-| PUT | `/api/saves/:saveId/players/:playerId` | Atualiza dados do jogador |
-| PATCH | `/api/saves/:saveId/players/:playerId/stats` | Atualiza stats da temporada atual |
-| DELETE | `/api/saves/:saveId/players/:playerId/release` | Dispensa (seta `activeClubStintId: null`) |
+| `GET` | `/saves/:saveId/players` | Listar jogadores (`?active=true` para elenco ativo, `?season=` para temporada específica) |
+| `GET` | `/saves/:saveId/players/:playerId` | Buscar jogador com histórico completo |
+| `POST` | `/saves/:saveId/players` | Adicionar jogador ao elenco |
+| `PUT` | `/saves/:saveId/players/:playerId` | Atualizar dados do jogador |
+| `PATCH` | `/saves/:saveId/players/:playerId/stats` | Atualizar stats da temporada atual |
+| `DELETE` | `/saves/:saveId/players/:playerId/release` | Dispensar jogador (sai do elenco, permanece no save) |
 
-**POST `/api/saves/:saveId/players` — body:**
+**POST — body:**
 ```json
 {
   "name": "Vinícius Jr.",
-  "position": "ATA",
+  "position": "PE",
   "age": 26,
   "status": "Crucial",
   "ovr": 91,
-  "salary": "€750K",
-  "marketValue": "€85M"
+  "potential": 95,
+  "shirtNumber": 7,
+  "nation": "Brasil",
+  "salary": 75,
+  "marketValue": 150
 }
 ```
-
-> `salary` e `marketValue` são opcionais mas devem seguir o [formato de moeda](#formato-de-moeda) quando informados.
-
-**Resposta de GET `/:playerId`:**
-```json
-{
-  "id": "...",
-  "name": "Vinícius Jr.",
-  "totalStats": { "goals": 47, "assists": 30, "yellowCards": 8, "redCards": 0 },
-  "history": [
-    { "club": "Real Madrid", "season": "2026/27", "goals": 22, "assists": 15, "yellowCards": 3, "redCards": 0 },
-    { "club": "Liverpool", "season": "2027/28", "goals": 25, "assists": 15, "yellowCards": 5, "redCards": 0 }
-  ]
-}
-```
+> `salary` em milhares de €: `75` = €75K. `marketValue` em milhões de €: `150` = €150M.
 
 **Enums válidos:**
 
 | Campo | Valores |
 |---|---|
-| `position` | `GOL`, `ZAG`, `MEI`, `ATA` |
+| `position` | `GOL`, `LD`, `LE`, `ZAG`, `VOL`, `MC`, `ME`, `MD`, `MEI`, `PE`, `PD`, `SA`, `ATA` |
 | `status` | `Crucial`, `Important`, `Role`, `Sporadic`, `Promising` |
 
----
-
-### Team Stats
+### Team Stats — 🔒 Requer sessão
 
 | Método | Rota | Descrição |
 |---|---|---|
-| GET | `/api/saves/:saveId/team-stats` | Todos os stats de todos os clubes |
-| GET | `/api/saves/:saveId/team-stats?season=current` | Stats da temporada atual |
-| PATCH | `/api/saves/:saveId/team-stats/:statsId` | Atualiza stats |
+| `GET` | `/saves/:saveId/team-stats` | Listar stats por competição (`?season=current` ou `?season=2027/28`) |
+| `PATCH` | `/saves/:saveId/team-stats/:statsId` | Atualizar stats de uma competição |
 
 **PATCH — body:**
 ```json
 {
   "goalsPro": 55,
   "goalsAgainst": 22,
-  "possession": 57,
   "wins": 24,
   "draws": 5,
   "losses": 9,
   "leaguePosition": 1,
-  "europeanCupResult": "Campeao",
-  "nationalCupResult": "Semifinal"
+  "cupResult": "Campeao"
 }
 ```
-
-> - `possession` deve estar entre 0 e 100
-> - `leaguePosition` é inteiro, mínimo 1
-> - Ao avançar de temporada, `leaguePosition === 1` ou resultados `"Campeao"` nas copas geram troféus automaticamente
 
 **Enum `CupResult`:**
 
@@ -285,17 +246,14 @@ Todos os campos monetários (`salary`, `marketValue`, `budget`, `balance`, `fee`
 | `Eliminado` | Eliminado em fase não especificada |
 | `NaoParticipou` | Não participou (padrão) |
 
----
-
-### Transfers
+### Transfers — 🔒 Requer sessão
 
 | Método | Rota | Descrição |
 |---|---|---|
-| GET | `/api/saves/:saveId/transfers` | Todas as transferências |
-| GET | `/api/saves/:saveId/transfers?season=current` | Transferências da temporada atual |
-| POST | `/api/saves/:saveId/transfers` | Registra transferência (transação) |
-| PUT | `/api/saves/:saveId/transfers/:tid` | Atualiza transferência |
-| DELETE | `/api/saves/:saveId/transfers/:tid` | Remove transferência |
+| `GET` | `/saves/:saveId/transfers` | Listar transferências (`?season=current` para temporada atual) |
+| `POST` | `/saves/:saveId/transfers` | Registrar transferência |
+| `PUT` | `/saves/:saveId/transfers/:tid` | Atualizar transferência |
+| `DELETE` | `/saves/:saveId/transfers/:tid` | Deletar transferência |
 
 **POST — body:**
 ```json
@@ -304,129 +262,118 @@ Todos os campos monetários (`salary`, `marketValue`, `budget`, `balance`, `fee`
   "type": "compra",
   "from": "Real Madrid",
   "to": "Liverpool",
-  "fee": "€80M",
+  "fee": 80,
   "season": "2027/28",
   "playerId": "uuid-opcional"
 }
 ```
+> `fee` em milhões de €. Tipos válidos: `compra`, `venda`, `emprestimo_entrada`, `emprestimo_saida`.
 
-**Lógica por tipo:**
-
-| Tipo | `playerId` fornecido | Comportamento |
-|---|---|---|
-| `compra` | Sim | Reativa player existente + cria PlayerSeasonStats se não existir |
-| `compra` | Não | Cria novo player com dados mínimos e vincula ao elenco |
-| `venda` | Sim | Seta `activeClubStintId: null` no player |
-| `venda` | Não | Apenas registra a transferência |
-
-> - O `balance` do save é atualizado automaticamente: **compra** debita o `fee`; **venda** credita o `fee`. Se `fee` for nulo ou `€0`, o `balance` não é alterado.
-> - O formato de `season` deve ser `YYYY/YY` (ex: `2027/28`).
-> - `fee` deve seguir o [formato de moeda](#formato-de-moeda).
-
----
-
-### Trophies
+### Trophies — 🔒 Requer sessão
 
 | Método | Rota | Descrição |
 |---|---|---|
-| GET | `/api/saves/:saveId/trophies` | Lista troféus com nome do clube |
-| POST | `/api/saves/:saveId/trophies` | Adiciona troféu ao clube atual |
-| DELETE | `/api/saves/:saveId/trophies/:id` | Remove troféu |
+| `GET` | `/saves/:saveId/trophies` | Listar troféus com clube e competição |
+| `POST` | `/saves/:saveId/trophies` | Adicionar troféu ao ClubStint atual |
+| `DELETE` | `/saves/:saveId/trophies/:id` | Deletar troféu |
 
 **POST — body:**
 ```json
 {
-  "name": "Premier League",
+  "competitionId": "uuid-da-competicao",
   "year": 2027
 }
 ```
+> Use `GET /api/competitions` para obter os UUIDs válidos.
 
-**Resposta de GET:**
-```json
-[
-  {
-    "id": "uuid",
-    "name": "Manchester City — Campeão da Liga 2026/27",
-    "year": 2027,
-    "club": "Manchester City"
-  }
-]
+---
+
+## Autenticação
+
+A API utiliza **Better Auth** com sessão via token de portador.
+
+Inclua o token em todas as rotas protegidas:
+
+```http
+Authorization: Bearer <token>
+```
+
+O token é obtido em `POST /api/auth/sign-in/email` e validado via `GET /api/auth/session`.
+
+---
+
+## Variáveis de Ambiente
+
+| Variável | Descrição | Obrigatória |
+|---|---|---|
+| `DATABASE_URL` | URL do PostgreSQL com pooler (Neon + pgbouncer) | ✅ |
+| `DIRECT_URL` | URL direta do PostgreSQL (para migrations) | ✅ |
+| `BETTER_AUTH_SECRET` | Secret para assinar sessões Better Auth (`openssl rand -base64 32`) | ✅ |
+| `BETTER_AUTH_URL` | URL base da API (usada pelo Better Auth) | ✅ |
+| `TRUSTED_ORIGINS` | Origens permitidas para CORS (separadas por vírgula) | ✅ |
+| `REDIS_URL` | URL de conexão com Redis | ✅ |
+| `PORT` | Porta do servidor | ❌ (padrão: `3333`) |
+
+---
+
+## Scripts
+
+```bash
+npm run dev                   # dev com hot reload (tsx watch)
+npm run build                 # compila TypeScript para dist/
+npm start                     # inicia em produção (node dist/server.js)
+npm run db:migrate            # cria e aplica migration (dev)
+npm run db:generate           # regenera Prisma Client
+npm run db:seed               # seed principal
+npm run db:seed-competitions  # seed de competições
+npm run db:migrate-data       # migra dados legados
+npm run db:studio             # abre Prisma Studio
 ```
 
 ---
 
-### Troféus automáticos
-
-Ao chamar `PATCH /api/saves/:saveId` com uma `currentSeason` diferente, a API verifica o `TeamSeasonStats` da temporada que está encerrando e cria troféus automaticamente:
-
-| Condição | Troféu gerado |
-|---|---|
-| `leaguePosition === 1` | `"<Clube> — Campeão da Liga <temporada>"` |
-| `europeanCupResult === "Campeao"` | `"<Clube> — Campeão Europeu <temporada>"` |
-| `nationalCupResult === "Campeao"` | `"<Clube> — Campeão da Copa Nacional <temporada>"` |
-
-Toda a criação de troféus + stats da nova temporada ocorre em uma única transação Prisma.
-
----
-
-## Tratamento de erros
-
-Todos os erros retornam no formato:
-
-```json
-{
-  "error": "Mensagem descritiva",
-  "statusCode": 404
-}
-```
-
-| Status | Situação |
-|---|---|
-| 400 | Validação de schema falhou, formato de moeda inválido ou regra de negócio violada |
-| 404 | Recurso não encontrado |
-| 500 | Erro interno inesperado |
-
----
-
-## Casos de uso típicos
-
-**Iniciar uma carreira:**
-1. `GET /api/clubs` — escolha um clube
-2. `POST /api/saves` — crie o save com nome, clube e `budget` inicial
-3. `POST /api/saves/:saveId/players` — adicione jogadores ao elenco
-
-**Janela de transferências:**
-1. `POST /api/saves/:saveId/transfers` com `type: "venda"` — venda jogadores (credita `balance`)
-2. `POST /api/saves/:saveId/transfers` com `type: "compra"` — contrate jogadores (debita `balance`)
-
-**Fechar uma temporada:**
-1. `PATCH /api/saves/:saveId/team-stats/:statsId` — atualize stats finais incluindo `leaguePosition`, `europeanCupResult` e `nationalCupResult`
-2. `PATCH /api/saves/:saveId/players/:playerId/stats` — atualize stats individuais
-3. `PATCH /api/saves/:saveId` — avance a `currentSeason` (cria troféus automáticos + novos registros de stats)
-
-**Mudar de clube:**
-1. `POST /api/saves/:saveId/club-stints` — registra a mudança, fecha o stint anterior e desvincula todo o elenco
-
----
-
-## Estrutura do projeto
+## Estrutura de Pastas
 
 ```
-├── prisma/
-│   ├── schema.prisma       # Models e enums
-│   └── seed.ts             # Dados de exemplo
-├── src/
-│   ├── app.ts              # Fastify + plugins + error handler
-│   ├── server.ts           # Bootstrap do servidor
-│   ├── lib/
-│   │   └── prisma.ts       # Singleton do PrismaClient
-│   ├── utils/
-│   │   ├── errors.ts       # AppError / NotFoundError
-│   │   └── currency.ts     # formatCurrency / parseCurrency / isValidCurrencyFormat
-│   ├── routes/             # Definição de rotas + schemas Swagger
-│   ├── controllers/        # Handlers HTTP (request → service → reply)
-│   └── services/           # Regras de negócio + queries Prisma
-├── docker-compose.yml
-├── .env.example
-└── tsconfig.json
+src/
+├── features/
+│   ├── auth/             # Autenticação (Better Auth)
+│   ├── clubs/            # Lista de clubes disponíveis
+│   ├── club-stints/      # Passagens por clubes
+│   ├── competitions/     # Competições (liga, copa, europeia)
+│   ├── players/          # Elenco e stats de jogadores
+│   ├── saves/            # Saves de carreira
+│   ├── team-stats/       # Estatísticas da equipe por competição
+│   ├── transfers/        # Transferências
+│   └── trophies/         # Troféus
+├── shared/
+│   ├── lib/              # Instâncias compartilhadas (Prisma, Redis)
+│   └── utils/            # Helpers, error handling, auth hooks
+├── types/                # Tipos globais TypeScript
+├── app.ts                # Fastify — plugins, rotas, error handler
+└── server.ts             # Entry point (listen local ou handler Vercel)
+prisma/
+├── schema.prisma         # Schema do banco
+├── seed.ts               # Seed principal
+├── seed-competitions.ts  # Seed de competições
+└── migrate-data.ts       # Migração de dados legados
+skills/                   # Skills do Claude Code para este projeto
+└── docs/                 # Skill de documentação (gera/atualiza este README)
+```
+
+---
+
+## Deploy
+
+### Vercel
+
+A API está configurada para rodar como Serverless Function na Vercel via `src/server.ts`.
+
+1. Conecte o repositório na Vercel
+2. Configure as variáveis de ambiente no painel
+3. Defina o comando de build: `npm run build`
+4. Rode as migrations antes do primeiro deploy:
+
+```bash
+npx prisma migrate deploy
 ```
