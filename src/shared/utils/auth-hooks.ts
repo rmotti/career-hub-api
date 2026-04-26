@@ -3,7 +3,7 @@ import { auth } from '../lib/auth.js'
 import { AppError } from './errors.js'
 import { cacheGet, cacheSet, cacheInvalidate } from './cache.js'
 
-type UserRole = 'ADMIN' | 'USER'
+type UserRole = 'admin' | 'user'
 type UserPlan = 'FREE' | 'PRO' | 'PREMIUM'
 
 const PLAN_HIERARCHY: Record<UserPlan, number> = {
@@ -87,7 +87,7 @@ export function requirePlan(minimumPlan: UserPlan) {
     const userRole = (session.user as { role?: string }).role as UserRole | undefined
 
     // admin sempre passa
-    if (userRole === 'ADMIN') {
+    if (userRole === 'admin') {
       request.user = session.user
       request.session = session.session
       return

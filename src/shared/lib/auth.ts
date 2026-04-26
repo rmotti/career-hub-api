@@ -26,11 +26,6 @@ export const auth = betterAuth({
 
   user: {
     additionalFields: {
-      role: {
-        type: 'string',
-        defaultValue: 'USER',
-        input: false, // não pode ser definido pelo usuário no cadastro
-      },
       plan: {
         type: 'string',
         defaultValue: 'FREE',
@@ -40,6 +35,12 @@ export const auth = betterAuth({
   },
 
   trustedOrigins: process.env.TRUSTED_ORIGINS?.split(',') ?? [],
+
+  rateLimit: {
+    enabled: process.env.DISABLE_RATE_LIMIT !== 'true',
+    window: 60,
+    max: 100,
+  },
 
   ...(process.env.NODE_ENV === 'production' && {
     advanced: {
