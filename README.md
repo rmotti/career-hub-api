@@ -370,11 +370,11 @@ O projeto deve usar **GitHub Actions para CI** e **Railway para CD**.
 
 ### Estratégia recomendada
 
-1. **CI em pull requests e pushes para `main`**
+1. **CI em pushes para `main`**
    - Instalar dependências com `npm ci`
    - Gerar Prisma Client via `postinstall`
    - Validar TypeScript com `npm run build`
-   - Rodar testes com `npm test` quando a suíte de testes for adicionada
+   - Rodar testes com `npm test`
 
 2. **Testes automatizados**
    - Começar com testes unitários de helpers e services sem dependência externa
@@ -388,20 +388,20 @@ O projeto deve usar **GitHub Actions para CI** e **Railway para CD**.
 
 4. **CD pelo Railway**
    - Railway deve acompanhar a branch de produção do GitHub
-   - O deploy deve acontecer somente depois do merge na branch configurada
+   - O deploy deve acontecer a partir dos pushes na branch `main`
+   - `railway.json` define build, migration antes do deploy, start e healthcheck
    - As variáveis sensíveis devem ficar no painel do Railway, não no repositório
 
 ### Plano de implementação
 
-#### Fase 1 — CI mínimo
+#### Fase 1 — CI com build e testes
 
-Criar `.github/workflows/ci.yml` com:
+Criar `.github/workflows/ci.yml` para rodar em todo push na `main`:
 
 ```yaml
 name: CI
 
 on:
-  pull_request:
   push:
     branches:
       - main
@@ -410,7 +410,7 @@ permissions:
   contents: read
 
 jobs:
-  build:
+  build-and-test:
     runs-on: ubuntu-latest
 
     steps:
@@ -423,11 +423,12 @@ jobs:
 
       - run: npm ci
       - run: npm run build
+      - run: npm test
 ```
 
 #### Fase 2 — Base de testes
 
-Adicionar um framework de testes, preferencialmente Vitest, e criar scripts:
+Adicionar Vitest e criar scripts:
 
 ```json
 {
@@ -438,11 +439,7 @@ Adicionar um framework de testes, preferencialmente Vitest, e criar scripts:
 }
 ```
 
-Depois atualizar o workflow para executar:
-
-```bash
-npm test
-```
+Os primeiros testes cobrem helpers e services sem dependência de PostgreSQL ou Redis.
 
 #### Fase 3 — Testes de integração
 
@@ -460,14 +457,14 @@ Configurar no Railway:
 - Repositório GitHub conectado
 - Branch de produção definida
 - Variáveis de ambiente configuradas
+- Configuração do deploy versionada em `railway.json`
+
+O arquivo `railway.json` define:
+
 - Build command: `npm run build`
+- Pre-deploy command: `npx prisma migrate deploy`
 - Start command: `npm start`
-
-Se as migrations forem automatizadas no deploy, usar:
-
-```bash
-npx prisma migrate deploy && npm start
-```
+- Healthcheck path: `/`
 
 ---
 
@@ -480,22 +477,10 @@ A API está hospedada no Railway.
 1. Conecte o repositório GitHub no Railway
 2. Configure a branch de produção
 3. Configure as variáveis de ambiente no painel do Railway
-4. Defina o comando de build:
+4. O Railway usa `railway.json` para aplicar build, pre-deploy migration, start e healthcheck
 
-```bash
-npm run build
-```
-
-5. Defina o comando de start:
-
-```bash
-npm start
-```
-
-6. Aplique migrations em produção com:
+As migrations de produção rodam no pre-deploy:
 
 ```bash
 npx prisma migrate deploy
 ```
-
-> Se preferir automatizar migrations no deploy, use `npx prisma migrate deploy && npm start` como start command. Faça isso apenas se o projeto aceitar que cada deploy tente aplicar migrations pendentes antes de iniciar a API.
