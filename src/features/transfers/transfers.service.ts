@@ -62,7 +62,7 @@ export async function listTransfers(saveId: string, seasonFilter?: string) {
       createdAt: true,
       playerId: true,
       player: {
-        select: { id: true, name: true, position: true },
+        select: { id: true, name: true, position: true, alternativePosition: true },
       },
     },
     orderBy: { createdAt: 'desc' },

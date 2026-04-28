@@ -204,17 +204,22 @@ Documentação interativa (Swagger): `http://localhost:3333/docs`
   "potential": 95,
   "shirtNumber": 7,
   "nation": "Brasil",
+  "alternativePosition": {
+    "positions": ["PD", "SA"]
+  },
   "salary": 75,
   "marketValue": 150
 }
 ```
 > `salary` em milhares de €: `75` = €75K. `marketValue` em milhões de €: `150` = €150M.
+> `alternativePosition.positions` aceita zero ou mais posições secundárias, sem repetir a posição principal.
 
 **Enums válidos:**
 
 | Campo | Valores |
 |---|---|
 | `position` | `GOL`, `LD`, `LE`, `ZAG`, `VOL`, `MC`, `ME`, `MD`, `MEI`, `PE`, `PD`, `SA`, `ATA` |
+| `alternativePosition.positions` | `GOL`, `LD`, `LE`, `ZAG`, `VOL`, `MC`, `ME`, `MD`, `MEI`, `PE`, `PD`, `SA`, `ATA` |
 | `status` | `Crucial`, `Important`, `Role`, `Sporadic`, `Promising` |
 
 ### Team Stats — 🔒 Requer sessão

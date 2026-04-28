@@ -37,6 +37,7 @@ export async function createPlayer(
       potential?: number
       shirtNumber?: number
       nation?: string
+      alternativePosition?: { positions: Position[] }
       salary?: number
       marketValue?: number
     }
@@ -59,6 +60,7 @@ export async function updatePlayer(
       potential?: number
       shirtNumber?: number
       nation?: string
+      alternativePosition?: { positions: Position[] }
       salary?: number
       marketValue?: number
       matches?: number

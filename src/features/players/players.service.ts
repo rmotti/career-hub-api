@@ -15,6 +15,12 @@ const POSITION_ORDER: Position[] = [
   'GOL', 'LD', 'LE', 'ZAG', 'VOL', 'MC', 'ME', 'MD', 'MEI', 'PE', 'PD', 'SA', 'ATA',
 ]
 
+const POSITION_VALUES = new Set<Position>(POSITION_ORDER)
+
+type AlternativePositionInput = {
+  positions: Position[]
+}
+
 function formatPlayer<T extends { marketValue: number | null; salary: number | null }>(p: T) {
   return {
     ...p,
@@ -255,6 +261,7 @@ export async function createPlayer(
     potential?: number
     shirtNumber?: number
     nation?: string
+    alternativePosition?: AlternativePositionInput
     salary?: number
     marketValue?: number
     matches?: number
@@ -278,7 +285,10 @@ export async function createPlayer(
   }
 
   const currentStint = save.clubStints[0]
-  const { matches, ...playerFields } = data
+  const { matches, alternativePosition, ...playerFields } = data
+  const normalizedAlternativePosition = alternativePosition !== undefined
+    ? validateAlternativePosition(alternativePosition, data.position)
+    : undefined
 
   const player = await prisma.$transaction(async (tx) => {
     const newPlayer = await tx.player.create({
@@ -286,6 +296,7 @@ export async function createPlayer(
         saveId,
         activeClubStintId: currentStint?.id ?? null,
         ...playerFields,
+        ...(normalizedAlternativePosition !== undefined && { alternativePosition: normalizedAlternativePosition }),
       },
     })
 
@@ -320,12 +331,13 @@ export async function updatePlayer(
     potential?: number
     shirtNumber?: number
     nation?: string
+    alternativePosition?: AlternativePositionInput
     salary?: number
     marketValue?: number
     matches?: number
   }
 ) {
-  const { matches, ...playerFields } = data
+  const { matches, alternativePosition, ...playerFields } = data
 
   const [player, saveWithStint] = await Promise.all([
     prisma.player.findFirst({ where: { id: playerId, saveId } }),
@@ -347,7 +359,22 @@ export async function updatePlayer(
     await checkShirtNumberConflict(saveId, data.shirtNumber, playerId)
   }
 
-  const updatedPlayer = await prisma.player.update({ where: { id: playerId }, data: playerFields })
+  const primaryPosition = data.position ?? player.position
+  const normalizedAlternativePosition = alternativePosition !== undefined
+    ? validateAlternativePosition(alternativePosition, primaryPosition)
+    : data.position !== undefined
+      ? validateAlternativePosition(player.alternativePosition, primaryPosition)
+      : undefined
+
+  const updatedPlayer = await prisma.player.update({
+    where: { id: playerId },
+    data: {
+      ...playerFields,
+      ...(normalizedAlternativePosition !== undefined && alternativePosition !== undefined && {
+        alternativePosition: normalizedAlternativePosition,
+      }),
+    },
+  })
 
   if (matches !== undefined && saveWithStint?.clubStints[0]) {
     const currentStint = saveWithStint.clubStints[0]
@@ -482,4 +509,34 @@ async function checkShirtNumberConflict(
       'SHIRT_NUMBER_CONFLICT'
     )
   }
+}
+
+function validateAlternativePosition(value: unknown, primaryPosition: Position): AlternativePositionInput {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new AppError('O campo alternativePosition deve ser um objeto com a propriedade positions.', 400)
+  }
+
+  const positions = (value as { positions?: unknown }).positions
+  if (!Array.isArray(positions)) {
+    throw new AppError('O campo alternativePosition.positions deve ser uma lista.', 400)
+  }
+
+  const seen = new Set<Position>()
+  for (const position of positions) {
+    if (typeof position !== 'string' || !POSITION_VALUES.has(position as Position)) {
+      throw new AppError(`Posição alternativa inválida: '${String(position)}'.`, 400)
+    }
+
+    if (position === primaryPosition) {
+      throw new AppError('alternativePosition.positions não deve repetir a posição principal do jogador.', 400)
+    }
+
+    if (seen.has(position as Position)) {
+      throw new AppError(`Posição alternativa duplicada: '${position}'.`, 400)
+    }
+
+    seen.add(position as Position)
+  }
+
+  return { positions: [...seen] }
 }

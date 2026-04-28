@@ -2,6 +2,22 @@ import { FastifyInstance } from 'fastify'
 import { Position, PlayerStatus } from '@prisma/client'
 import * as playersController from './players.controller.js'
 
+const POSITION_VALUES = ['GOL', 'LD', 'LE', 'ZAG', 'VOL', 'MC', 'ME', 'MD', 'MEI', 'PE', 'PD', 'SA', 'ATA'] as const
+
+const alternativePositionSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['positions'],
+  properties: {
+    positions: {
+      type: 'array',
+      uniqueItems: true,
+      items: { type: 'string', enum: POSITION_VALUES },
+      example: ['PD', 'SA'],
+    },
+  },
+}
+
 export async function playersRoutes(app: FastifyInstance) {
   app.get<{
     Params: { saveId: string }
@@ -54,6 +70,7 @@ export async function playersRoutes(app: FastifyInstance) {
       age: number
       status: PlayerStatus
       ovr: number
+      alternativePosition?: { positions: Position[] }
       salary?: number
       marketValue?: number
     }
@@ -83,6 +100,7 @@ export async function playersRoutes(app: FastifyInstance) {
             potential: { type: 'integer', minimum: 40, maximum: 99, example: 88 },
             shirtNumber: { type: 'integer', minimum: 1, maximum: 99, example: 10 },
             nation: { type: 'string', example: 'Brasil' },
+            alternativePosition: alternativePositionSchema,
             salary: { type: 'number', minimum: 0, example: 75, description: 'Em milhares de €: 75 = €75K' },
             marketValue: { type: 'number', minimum: 0, example: 35, description: 'Em milhões de €: 35 = €35M, 0.9 = €900K' },
             matches: { type: 'integer', minimum: 0, example: 23 },
@@ -101,6 +119,7 @@ export async function playersRoutes(app: FastifyInstance) {
       age?: number
       status?: PlayerStatus
       ovr?: number
+      alternativePosition?: { positions: Position[] }
       salary?: number
       marketValue?: number
     }
@@ -129,6 +148,7 @@ export async function playersRoutes(app: FastifyInstance) {
             potential: { type: 'integer', minimum: 40, maximum: 99 },
             shirtNumber: { type: 'integer', minimum: 1, maximum: 99 },
             nation: { type: 'string' },
+            alternativePosition: alternativePositionSchema,
             salary: { type: 'number', minimum: 0, description: 'Em milhares de €: 75 = €75K' },
             marketValue: { type: 'number', minimum: 0, description: 'Em milhões de €: 35 = €35M, 0.9 = €900K' },
             matches: { type: 'integer', minimum: 0 },

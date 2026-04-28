@@ -237,10 +237,10 @@ export default function (data) {
   // ─── 6. Criar 5 jogadores ────────────────────────────────────────────────────
   const players = [
     { position: 'GOL', ovr: rand(78, 88), status: 'Crucial',   age: rand(22, 32), salary: rand(20, 50),  marketValue: rand(10, 25) },
-    { position: 'ATA', ovr: rand(82, 92), status: 'Important', age: rand(21, 28), salary: rand(50, 120), marketValue: rand(30, 80) },
-    { position: 'MC',  ovr: rand(76, 86), status: 'Role',      age: rand(24, 30), salary: rand(25, 60),  marketValue: rand(12, 35) },
-    { position: 'PE',  ovr: rand(80, 90), status: 'Promising', age: rand(19, 23), salary: rand(20, 70),  marketValue: rand(20, 60), potential: rand(88, 95) },
-    { position: 'ZAG', ovr: rand(77, 87), status: 'Important', age: rand(25, 31), salary: rand(30, 70),  marketValue: rand(15, 40) },
+    { position: 'ATA', ovr: rand(82, 92), status: 'Important', age: rand(21, 28), salary: rand(50, 120), marketValue: rand(30, 80), alternativePosition: { positions: ['SA'] } },
+    { position: 'MC',  ovr: rand(76, 86), status: 'Role',      age: rand(24, 30), salary: rand(25, 60),  marketValue: rand(12, 35), alternativePosition: { positions: ['VOL', 'MEI'] } },
+    { position: 'PE',  ovr: rand(80, 90), status: 'Promising', age: rand(19, 23), salary: rand(20, 70),  marketValue: rand(20, 60), potential: rand(88, 95), alternativePosition: { positions: ['PD', 'SA'] } },
+    { position: 'ZAG', ovr: rand(77, 87), status: 'Important', age: rand(25, 31), salary: rand(30, 70),  marketValue: rand(15, 40), alternativePosition: { positions: ['LD'] } },
   ]
 
   const playerIds = []
@@ -280,6 +280,7 @@ export default function (data) {
       marketValue: rand(25, 70),
       salary:      rand(40, 100),
       shirtNumber: rand(1, 99),
+      alternativePosition: { positions: ['PD', 'SA'] },
     }, token)
     updatePlayerDuration.add(res.timings.duration)
     check(res, { 'update player (PUT): status 200': r => r.status === 200 })
@@ -413,12 +414,15 @@ export default function (data) {
   sleep(0.1)
 
   // ─── 20. Criar jogador no novo clube ────────────────────────────────────────
+  const newPlayerPosition = pick(POSITIONS)
+  const newPlayerAlternativePosition = POSITIONS.find(p => p !== newPlayerPosition) || 'GOL'
   const newPlayerRes = post(`/api/saves/${saveId}/players`, {
     name:        `Arsenal-${__VU}-${Date.now()}`,
-    position:    pick(POSITIONS),
+    position:    newPlayerPosition,
     age:         rand(19, 30),
     status:      pick(STATUSES),
     ovr:         rand(74, 88),
+    alternativePosition: { positions: [newPlayerAlternativePosition] },
     salary:      rand(20, 80),
     marketValue: rand(10, 50),
   }, token)

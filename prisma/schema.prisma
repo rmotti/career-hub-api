@@ -116,6 +116,7 @@ model Player {
   potential         Int?
   shirtNumber       Int?
   nation            String?
+  alternativePosition Json                @default("{\"positions\":[]}")
   activeClubStint   ClubStint?          @relation("ActiveClubStint", fields: [activeClubStintId], references: [id])
   save              Save                @relation(fields: [saveId], references: [id], onDelete: Cascade)
   ovrHistory        PlayerOvrHistory[]
