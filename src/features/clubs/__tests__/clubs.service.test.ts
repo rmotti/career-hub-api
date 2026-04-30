@@ -21,13 +21,13 @@ describe('clubs service', () => {
   })
 
   it('checks whether a club exists', () => {
-    expect(clubExists('Barcelona')).toBe(true)
+    expect(clubExists('FC Barcelona')).toBe(true)
     expect(clubExists('Made Up FC')).toBe(false)
   })
 
   it('finds the league for a known club', () => {
     expect(findLeagueByClub('Manchester City')).toBe('Premier League')
-    expect(findLeagueByClub('Bayern de Munique')).toBe('Bundesliga')
+    expect(findLeagueByClub('Bayern Munich')).toBe('Bundesliga')
     expect(findLeagueByClub('Made Up FC')).toBeNull()
   })
 })
