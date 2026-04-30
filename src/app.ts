@@ -15,6 +15,7 @@ import { teamStatsRoutes } from './features/team-stats/team-stats.routes.js'
 import { transfersRoutes } from './features/transfers/transfers.routes.js'
 import { trophiesRoutes } from './features/trophies/trophies.routes.js'
 import { competitionsRoutes } from './features/competitions/competitions.routes.js'
+import { getTrustedOrigins, isTrustedOrigin } from './shared/utils/origins.js'
 
 export const app = Fastify({
   logger: process.env.NODE_ENV !== 'production',
@@ -25,8 +26,14 @@ export const app = Fastify({
   },
 })
 
+const trustedOrigins = getTrustedOrigins()
+
 app.register(cors, {
-  origin: process.env.TRUSTED_ORIGINS?.split(',') ?? (process.env.NODE_ENV === 'production' ? false : true),
+  origin: process.env.NODE_ENV === 'production'
+    ? (origin, callback) => {
+        callback(null, isTrustedOrigin(origin, trustedOrigins))
+      }
+    : true,
   credentials: true,
 })
 
