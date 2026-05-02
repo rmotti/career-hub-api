@@ -241,6 +241,7 @@ model Fc26Player {
   @@index([ovr])
   @@index([potential])
   @@index([age])
+  @@index([positions], type: Gin)
 }
 
 enum UserPlan {
