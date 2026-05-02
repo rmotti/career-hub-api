@@ -225,6 +225,24 @@ model Trophy {
   @@unique([clubStintId, competitionId, year])
 }
 
+model Fc26Player {
+  id          Int      @id @default(autoincrement())
+  sofifaId    Int      @unique
+  name        String
+  positions   String[]
+  age         Int
+  ovr         Int
+  potential   Int
+  marketValue Float?
+  nation      String?
+  club        String?
+  wage        Float?
+
+  @@index([ovr])
+  @@index([potential])
+  @@index([age])
+}
+
 enum UserPlan {
   FREE
   PRO

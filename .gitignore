@@ -145,3 +145,6 @@ vite.config.ts.timestamp-*
 
 # Local docs
 docs/
+
+# Dataset files (download via Kaggle + notebook)
+data/
