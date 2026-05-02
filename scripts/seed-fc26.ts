@@ -41,6 +41,7 @@ async function main() {
             marketValue: row.marketValue ? Number(row.marketValue) : null,
             nation: row.nation || null,
             club: row.club || null,
+            league: row.league || null,
             wage: row.wage ? Number(row.wage) : null,
           },
           create: {
@@ -53,6 +54,7 @@ async function main() {
             marketValue: row.marketValue ? Number(row.marketValue) : null,
             nation: row.nation || null,
             club: row.club || null,
+            league: row.league || null,
             wage: row.wage ? Number(row.wage) : null,
           },
         })

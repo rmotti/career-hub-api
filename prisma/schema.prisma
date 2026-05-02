@@ -236,11 +236,14 @@ model Fc26Player {
   marketValue Float?
   nation      String?
   club        String?
+  league      String?
   wage        Float?
 
   @@index([ovr])
   @@index([potential])
   @@index([age])
+  @@index([nation])
+  @@index([league])
   @@index([positions], type: Gin)
 }
 

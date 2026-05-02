@@ -2,18 +2,22 @@ import { prisma } from '../../shared/lib/prisma.js'
 import { cacheGet, cacheSet } from '../../shared/utils/cache.js'
 
 const TTL = {
-  list: 60 * 60 * 24,   // 24h — dataset estático
+  list: 60 * 60 * 24,
   detail: 60 * 60 * 24,
+  filters: 60 * 60 * 24,
 }
 
 export interface Fc26PlayerFilters {
   positions?: string[]
+  nations?: string[]
+  clubs?: string[]
+  leagues?: string[]
   minOvr?: number
   maxOvr?: number
   minAge?: number
   maxAge?: number
   minPotential?: number
-  nation?: string
+  maxPotential?: number
   limit?: number
   offset?: number
 }
@@ -28,22 +32,19 @@ export async function listFc26Players(filters: Fc26PlayerFilters) {
   if (cached) return cached
 
   const {
-    positions,
-    minOvr,
-    maxOvr,
-    minAge,
-    maxAge,
-    minPotential,
-    nation,
-    limit = 20,
-    offset = 0,
+    positions, nations, clubs, leagues,
+    minOvr, maxOvr, minAge, maxAge,
+    minPotential, maxPotential,
+    limit = 20, offset = 0,
   } = filters
 
   const where: any = {}
 
-  if (positions?.length) {
-    where.positions = { hasSome: positions }
-  }
+  if (positions?.length)    where.positions = { hasSome: positions }
+  if (nations?.length)      where.nation    = { in: nations }
+  if (clubs?.length)        where.club      = { in: clubs }
+  if (leagues?.length)      where.league    = { in: leagues }
+
   if (minOvr !== undefined || maxOvr !== undefined) {
     where.ovr = {}
     if (minOvr !== undefined) where.ovr.gte = minOvr
@@ -54,11 +55,10 @@ export async function listFc26Players(filters: Fc26PlayerFilters) {
     if (minAge !== undefined) where.age.gte = minAge
     if (maxAge !== undefined) where.age.lte = maxAge
   }
-  if (minPotential !== undefined) {
-    where.potential = { gte: minPotential }
-  }
-  if (nation) {
-    where.nation = { contains: nation, mode: 'insensitive' }
+  if (minPotential !== undefined || maxPotential !== undefined) {
+    where.potential = {}
+    if (minPotential !== undefined) where.potential.gte = minPotential
+    if (maxPotential !== undefined) where.potential.lte = maxPotential
   }
 
   const [players, total] = await Promise.all([
@@ -81,12 +81,51 @@ export async function getFc26PlayerById(sofifaId: number) {
   const cached = await cacheGet(cacheKey)
   if (cached) return cached
 
-  const player = await prisma.fc26Player.findUnique({
-    where: { sofifaId },
-  })
-
+  const player = await prisma.fc26Player.findUnique({ where: { sofifaId } })
   if (!player) return null
 
   await cacheSet(cacheKey, player, TTL.detail)
   return player
+}
+
+export async function getFc26Filters() {
+  const cacheKey = 'fc26:filters'
+  const cached = await cacheGet(cacheKey)
+  if (cached) return cached
+
+  const [nationsRaw, leaguesRaw, clubsRaw] = await Promise.all([
+    prisma.fc26Player.findMany({
+      where: { nation: { not: null } },
+      select: { nation: true },
+      distinct: ['nation'],
+      orderBy: { nation: 'asc' },
+    }),
+    prisma.fc26Player.findMany({
+      where: { league: { not: null } },
+      select: { league: true },
+      distinct: ['league'],
+      orderBy: { league: 'asc' },
+    }),
+    prisma.fc26Player.findMany({
+      where: { club: { not: null }, league: { not: null } },
+      select: { club: true, league: true },
+      distinct: ['club'],
+      orderBy: { club: 'asc' },
+    }),
+  ])
+
+  const positions = ['GOL','ZAG','LE','LD','VOL','MC','ME','MD','MEI','PE','PD','SA','ATA']
+  const nations = nationsRaw.map((r) => r.nation!)
+  const leagues = leaguesRaw.map((r) => r.league!)
+
+  const clubsByLeague: Record<string, string[]> = {}
+  for (const { club, league } of clubsRaw) {
+    if (!club || !league) continue
+    if (!clubsByLeague[league]) clubsByLeague[league] = []
+    clubsByLeague[league].push(club)
+  }
+
+  const result = { positions, nations, leagues, clubsByLeague }
+  await cacheSet(cacheKey, result, TTL.filters)
+  return result
 }
