@@ -20,6 +20,8 @@ export interface Fc26PlayerFilters {
   maxAge?: number
   minPotential?: number
   maxPotential?: number
+  minMarketValue?: number
+  maxMarketValue?: number
   minPace?: number
   maxPace?: number
   minHeight?: number
@@ -44,6 +46,7 @@ export async function listFc26Players(filters: Fc26PlayerFilters) {
     nations, clubs, leagues,
     minOvr, maxOvr, minAge, maxAge,
     minPotential, maxPotential,
+    minMarketValue, maxMarketValue,
     minPace, maxPace,
     minHeight, maxHeight,
     preferredFoot, traits,
@@ -73,6 +76,11 @@ export async function listFc26Players(filters: Fc26PlayerFilters) {
     where.potential = {}
     if (minPotential !== undefined) where.potential.gte = minPotential
     if (maxPotential !== undefined) where.potential.lte = maxPotential
+  }
+  if (minMarketValue !== undefined || maxMarketValue !== undefined) {
+    where.marketValue = {}
+    if (minMarketValue !== undefined) where.marketValue.gte = minMarketValue
+    if (maxMarketValue !== undefined) where.marketValue.lte = maxMarketValue
   }
   if (minPace !== undefined || maxPace !== undefined) {
     where.pace = {}

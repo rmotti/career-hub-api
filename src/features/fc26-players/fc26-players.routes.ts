@@ -140,6 +140,8 @@ export async function fc26PlayersRoutes(app: FastifyInstance) {
           maxAge:       { type: 'integer', example: 26 },
           minPotential: { type: 'integer', example: 80 },
           maxPotential: { type: 'integer', example: 95 },
+          minMarketValue: { type: 'number', example: 100, description: 'Valor de mercado mínimo em milhões de €' },
+          maxMarketValue: { type: 'number', example: 250, description: 'Valor de mercado máximo em milhões de €' },
           minPace:      { type: 'integer', example: 85, description: 'Pace mínimo' },
           maxPace:      { type: 'integer', example: 99, description: 'Pace máximo' },
           minHeight:    { type: 'integer', example: 180, description: 'Altura mínima em cm' },

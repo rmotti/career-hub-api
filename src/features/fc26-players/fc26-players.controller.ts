@@ -15,6 +15,8 @@ interface ListQuerystring {
   maxAge?: number
   minPotential?: number
   maxPotential?: number
+  minMarketValue?: number
+  maxMarketValue?: number
   minPace?: number
   maxPace?: number
   minHeight?: number
