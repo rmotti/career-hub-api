@@ -229,8 +229,12 @@ model Fc26Player {
   id          Int      @id @default(autoincrement())
   sofifaId    Int      @unique
   name        String
+  longName    String?
   positions   String[]
   age         Int
+  dob         String?
+  height      Int?
+  weight      Int?
   ovr         Int
   potential   Int
   marketValue Float?
@@ -238,13 +242,89 @@ model Fc26Player {
   club        String?
   league      String?
   wage        Float?
+  playerFaceUrl String?
+
+  // Contract
+  contractUntil Int?
+  releaseClause Float?
+
+  // Player attributes
+  preferredFoot           String?
+  weakFoot                Int?
+  skillMoves              Int?
+  internationalReputation Int?
+  workRate                String?
+  bodyType                String?
+  playerTags              String[]
+  playerTraits            String[]
+
+  // Overall ratings
+  pace      Int?
+  shooting  Int?
+  passing   Int?
+  dribbling Int?
+  defending Int?
+  physic    Int?
+
+  // Attacking
+  attackingCrossing        Int?
+  attackingFinishing       Int?
+  attackingHeadingAccuracy Int?
+  attackingShortPassing    Int?
+  attackingVolleys         Int?
+
+  // Skill
+  skillDribbling   Int?
+  skillCurve       Int?
+  skillFkAccuracy  Int?
+  skillLongPassing Int?
+  skillBallControl Int?
+
+  // Movement
+  movementAcceleration Int?
+  movementSprintSpeed  Int?
+  movementAgility      Int?
+  movementReactions    Int?
+  movementBalance      Int?
+
+  // Power
+  powerShotPower Int?
+  powerJumping   Int?
+  powerStamina   Int?
+  powerStrength  Int?
+  powerLongShots Int?
+
+  // Mentality
+  mentalityAggression    Int?
+  mentalityInterceptions Int?
+  mentalityPositioning   Int?
+  mentalityVision        Int?
+  mentalityPenalties     Int?
+  mentalityComposure     Int?
+
+  // Defending
+  defendingMarkingAwareness Int?
+  defendingStandingTackle   Int?
+  defendingSlidingTackle    Int?
+
+  // Goalkeeping
+  goalkeepingDiving      Int?
+  goalkeepingHandling    Int?
+  goalkeepingKicking     Int?
+  goalkeepingPositioning Int?
+  goalkeepingReflexes    Int?
+  goalkeepingSpeed       Int?
 
   @@index([ovr])
   @@index([potential])
   @@index([age])
   @@index([nation])
   @@index([league])
+  @@index([pace])
+  @@index([preferredFoot])
   @@index([positions], type: Gin)
+  @@index([playerTags], type: Gin)
+  @@index([playerTraits], type: Gin)
 }
 
 enum UserPlan {

@@ -18,6 +18,12 @@ export interface Fc26PlayerFilters {
   maxAge?: number
   minPotential?: number
   maxPotential?: number
+  minPace?: number
+  maxPace?: number
+  minHeight?: number
+  maxHeight?: number
+  preferredFoot?: string
+  traits?: string[]
   limit?: number
   offset?: number
 }
@@ -35,15 +41,20 @@ export async function listFc26Players(filters: Fc26PlayerFilters) {
     positions, nations, clubs, leagues,
     minOvr, maxOvr, minAge, maxAge,
     minPotential, maxPotential,
+    minPace, maxPace,
+    minHeight, maxHeight,
+    preferredFoot, traits,
     limit = 20, offset = 0,
   } = filters
 
   const where: any = {}
 
-  if (positions?.length)    where.positions = { hasSome: positions }
-  if (nations?.length)      where.nation    = { in: nations }
-  if (clubs?.length)        where.club      = { in: clubs }
-  if (leagues?.length)      where.league    = { in: leagues }
+  if (positions?.length)    where.positions   = { hasSome: positions }
+  if (nations?.length)      where.nation      = { in: nations }
+  if (clubs?.length)        where.club        = { in: clubs }
+  if (leagues?.length)      where.league      = { in: leagues }
+  if (preferredFoot)        where.preferredFoot = preferredFoot
+  if (traits?.length)       where.playerTraits  = { hasSome: traits }
 
   if (minOvr !== undefined || maxOvr !== undefined) {
     where.ovr = {}
@@ -59,6 +70,16 @@ export async function listFc26Players(filters: Fc26PlayerFilters) {
     where.potential = {}
     if (minPotential !== undefined) where.potential.gte = minPotential
     if (maxPotential !== undefined) where.potential.lte = maxPotential
+  }
+  if (minPace !== undefined || maxPace !== undefined) {
+    where.pace = {}
+    if (minPace !== undefined) where.pace.gte = minPace
+    if (maxPace !== undefined) where.pace.lte = maxPace
+  }
+  if (minHeight !== undefined || maxHeight !== undefined) {
+    where.height = {}
+    if (minHeight !== undefined) where.height.gte = minHeight
+    if (maxHeight !== undefined) where.height.lte = maxHeight
   }
 
   const [players, total] = await Promise.all([

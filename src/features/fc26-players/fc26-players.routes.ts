@@ -5,21 +5,91 @@ import {
   getFc26FiltersHandler,
 } from './fc26-players.controller.js'
 
+const nullableInt = { type: 'integer', nullable: true }
+const nullableNum = { type: 'number', nullable: true }
+const nullableStr = { type: 'string', nullable: true }
+
 const fc26PlayerSchema = {
   type: 'object',
   properties: {
     id: { type: 'integer' },
     sofifaId: { type: 'integer' },
     name: { type: 'string' },
+    longName: nullableStr,
     positions: { type: 'array', items: { type: 'string' } },
     age: { type: 'integer' },
+    dob: nullableStr,
+    height: nullableInt,
+    weight: nullableInt,
     ovr: { type: 'integer' },
     potential: { type: 'integer' },
-    marketValue: { type: 'number', nullable: true },
-    nation: { type: 'string', nullable: true },
-    club: { type: 'string', nullable: true },
-    league: { type: 'string', nullable: true },
-    wage: { type: 'number', nullable: true },
+    marketValue: nullableNum,
+    nation: nullableStr,
+    club: nullableStr,
+    league: nullableStr,
+    wage: nullableNum,
+    playerFaceUrl: nullableStr,
+
+    contractUntil: nullableInt,
+    releaseClause: nullableNum,
+
+    preferredFoot: nullableStr,
+    weakFoot: nullableInt,
+    skillMoves: nullableInt,
+    internationalReputation: nullableInt,
+    workRate: nullableStr,
+    bodyType: nullableStr,
+    playerTags: { type: 'array', items: { type: 'string' } },
+    playerTraits: { type: 'array', items: { type: 'string' } },
+
+    pace: nullableInt,
+    shooting: nullableInt,
+    passing: nullableInt,
+    dribbling: nullableInt,
+    defending: nullableInt,
+    physic: nullableInt,
+
+    attackingCrossing: nullableInt,
+    attackingFinishing: nullableInt,
+    attackingHeadingAccuracy: nullableInt,
+    attackingShortPassing: nullableInt,
+    attackingVolleys: nullableInt,
+
+    skillDribbling: nullableInt,
+    skillCurve: nullableInt,
+    skillFkAccuracy: nullableInt,
+    skillLongPassing: nullableInt,
+    skillBallControl: nullableInt,
+
+    movementAcceleration: nullableInt,
+    movementSprintSpeed: nullableInt,
+    movementAgility: nullableInt,
+    movementReactions: nullableInt,
+    movementBalance: nullableInt,
+
+    powerShotPower: nullableInt,
+    powerJumping: nullableInt,
+    powerStamina: nullableInt,
+    powerStrength: nullableInt,
+    powerLongShots: nullableInt,
+
+    mentalityAggression: nullableInt,
+    mentalityInterceptions: nullableInt,
+    mentalityPositioning: nullableInt,
+    mentalityVision: nullableInt,
+    mentalityPenalties: nullableInt,
+    mentalityComposure: nullableInt,
+
+    defendingMarkingAwareness: nullableInt,
+    defendingStandingTackle: nullableInt,
+    defendingSlidingTackle: nullableInt,
+
+    goalkeepingDiving: nullableInt,
+    goalkeepingHandling: nullableInt,
+    goalkeepingKicking: nullableInt,
+    goalkeepingPositioning: nullableInt,
+    goalkeepingReflexes: nullableInt,
+    goalkeepingSpeed: nullableInt,
   },
 }
 
@@ -68,6 +138,12 @@ export async function fc26PlayersRoutes(app: FastifyInstance) {
           maxAge:       { type: 'integer', example: 26 },
           minPotential: { type: 'integer', example: 80 },
           maxPotential: { type: 'integer', example: 95 },
+          minPace:      { type: 'integer', example: 85, description: 'Pace mínimo' },
+          maxPace:      { type: 'integer', example: 99, description: 'Pace máximo' },
+          minHeight:    { type: 'integer', example: 180, description: 'Altura mínima em cm' },
+          maxHeight:    { type: 'integer', example: 200, description: 'Altura máxima em cm' },
+          preferredFoot: { type: 'string', enum: ['Left', 'Right'], description: 'Pé dominante' },
+          traits:       { type: 'string', description: 'Traits separados por vírgula', example: 'Power Shot,Rapid' },
           limit:        { type: 'integer', default: 20, description: 'Máx: 100' },
           offset:       { type: 'integer', default: 0 },
         },

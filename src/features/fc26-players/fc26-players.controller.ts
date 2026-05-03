@@ -13,6 +13,12 @@ interface ListQuerystring {
   maxAge?: number
   minPotential?: number
   maxPotential?: number
+  minPace?: number
+  maxPace?: number
+  minHeight?: number
+  maxHeight?: number
+  preferredFoot?: string
+  traits?: string
   limit?: number
   offset?: number
 }
@@ -30,7 +36,7 @@ export async function listFc26PlayersHandler(
   request: FastifyRequest<{ Querystring: ListQuerystring }>,
   reply: FastifyReply
 ) {
-  const { positions, nations, clubs, leagues, ...rest } = request.query
+  const { positions, nations, clubs, leagues, traits, preferredFoot, ...rest } = request.query
 
   const result = await listFc26Players({
     ...rest,
@@ -38,6 +44,8 @@ export async function listFc26PlayersHandler(
     nations: splitParam(nations),
     clubs: splitParam(clubs),
     leagues: splitParam(leagues),
+    traits: splitParam(traits),
+    preferredFoot,
   })
 
   return reply.send(result)
