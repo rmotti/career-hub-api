@@ -128,7 +128,9 @@ export async function fc26PlayersRoutes(app: FastifyInstance) {
       querystring: {
         type: 'object',
         properties: {
-          positions:    { type: 'string', description: 'Posições separadas por vírgula', example: 'MC,ATA' },
+          positions:          { type: 'string', description: 'Posições separadas por vírgula (qualquer posição do array)', example: 'MC,ATA' },
+          primaryPositions:   { type: 'string', description: 'Filtro por posição principal (positions[0]), separadas por vírgula', example: 'ATA,ZAG' },
+          secondaryPositions: { type: 'string', description: 'Filtro por posição secundária (positions[1..]), separadas por vírgula', example: 'PD,PE' },
           nations:      { type: 'string', description: 'Nacionalidades separadas por vírgula', example: 'Brazil,Argentina' },
           clubs:        { type: 'string', description: 'Clubes separados por vírgula', example: 'Real Madrid,FC Barcelona' },
           leagues:      { type: 'string', description: 'Ligas separadas por vírgula', example: 'Premier League,LaLiga EA Sports' },

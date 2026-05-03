@@ -9,6 +9,8 @@ const TTL = {
 
 export interface Fc26PlayerFilters {
   positions?: string[]
+  primaryPositions?: string[]
+  secondaryPositions?: string[]
   nations?: string[]
   clubs?: string[]
   leagues?: string[]
@@ -38,7 +40,8 @@ export async function listFc26Players(filters: Fc26PlayerFilters) {
   if (cached) return cached
 
   const {
-    positions, nations, clubs, leagues,
+    positions, primaryPositions, secondaryPositions,
+    nations, clubs, leagues,
     minOvr, maxOvr, minAge, maxAge,
     minPotential, maxPotential,
     minPace, maxPace,
@@ -49,10 +52,10 @@ export async function listFc26Players(filters: Fc26PlayerFilters) {
 
   const where: any = {}
 
-  if (positions?.length)    where.positions   = { hasSome: positions }
-  if (nations?.length)      where.nation      = { in: nations }
-  if (clubs?.length)        where.club        = { in: clubs }
-  if (leagues?.length)      where.league      = { in: leagues }
+  if (positions?.length)    where.positions     = { hasSome: positions }
+  if (nations?.length)      where.nation        = { in: nations }
+  if (clubs?.length)        where.club          = { in: clubs }
+  if (leagues?.length)      where.league        = { in: leagues }
   if (preferredFoot)        where.preferredFoot = preferredFoot
   if (traits?.length)       where.playerTraits  = { hasSome: traits }
 
@@ -80,6 +83,32 @@ export async function listFc26Players(filters: Fc26PlayerFilters) {
     where.height = {}
     if (minHeight !== undefined) where.height.gte = minHeight
     if (maxHeight !== undefined) where.height.lte = maxHeight
+  }
+
+  if (primaryPositions?.length || secondaryPositions?.length) {
+    // Pre-filter in DB: player must have at least one of the requested positions anywhere
+    const candidatePositions = [...(primaryPositions ?? []), ...(secondaryPositions ?? [])]
+    where.positions = { hasSome: candidatePositions }
+
+    const allPlayers = await prisma.fc26Player.findMany({
+      where,
+      orderBy: { ovr: 'desc' },
+    })
+
+    const filtered = allPlayers.filter((p) => {
+      const primary = p.positions[0]
+      const secondary = p.positions.slice(1)
+      if (primaryPositions?.length && !primaryPositions.includes(primary)) return false
+      if (secondaryPositions?.length && !secondary.some((pos) => secondaryPositions.includes(pos))) return false
+      return true
+    })
+
+    const total = filtered.length
+    const players = filtered.slice(offset, offset + Math.min(limit, 100))
+
+    const result = { players, total, limit, offset }
+    await cacheSet(cacheKey, result, TTL.list)
+    return result
   }
 
   const [players, total] = await Promise.all([

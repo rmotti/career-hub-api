@@ -4,6 +4,8 @@ import { NotFoundError } from '../../shared/utils/errors.js'
 
 interface ListQuerystring {
   positions?: string
+  primaryPositions?: string
+  secondaryPositions?: string
   nations?: string
   clubs?: string
   leagues?: string
@@ -36,11 +38,13 @@ export async function listFc26PlayersHandler(
   request: FastifyRequest<{ Querystring: ListQuerystring }>,
   reply: FastifyReply
 ) {
-  const { positions, nations, clubs, leagues, traits, preferredFoot, ...rest } = request.query
+  const { positions, primaryPositions, secondaryPositions, nations, clubs, leagues, traits, preferredFoot, ...rest } = request.query
 
   const result = await listFc26Players({
     ...rest,
     positions: splitParam(positions),
+    primaryPositions: splitParam(primaryPositions),
+    secondaryPositions: splitParam(secondaryPositions),
     nations: splitParam(nations),
     clubs: splitParam(clubs),
     leagues: splitParam(leagues),
