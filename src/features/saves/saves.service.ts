@@ -3,7 +3,7 @@ import { AppError, NotFoundError } from '../../shared/utils/errors.js'
 import { clubExists, findLeagueByClub, LEAGUE_TO_COUNTRY } from '../clubs/clubs.service.js'
 import { getCompetitionIdsByCountry } from '../competitions/competitions.service.js'
 import { formatBalance } from '../../shared/utils/currency.js'
-import { PlayerStatus, type Save } from '@prisma/client'
+import { PlayerStatus, TransferType, type Save } from '@prisma/client'
 import { cacheGet, cacheSet, cacheInvalidate, cacheInvalidatePattern } from '../../shared/utils/cache.js'
 
 const TTL = {
@@ -272,7 +272,17 @@ export async function updateSave(
       }
 
       const loanedPlayers = await tx.player.findMany({
-        where: { saveId, status: PlayerStatus.Loan, activeClubStintId: null },
+        where: {
+          saveId,
+          status: PlayerStatus.Loan,
+          activeClubStintId: null,
+          transfers: {
+            some: {
+              type: TransferType.emprestimo_saida,
+              clubStintId: currentStint.id,
+            },
+          },
+        },
       })
       if (loanedPlayers.length > 0) {
         await tx.player.updateMany({
