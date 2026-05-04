@@ -21,12 +21,12 @@ const alternativePositionSchema = {
 export async function playersRoutes(app: FastifyInstance) {
   app.get<{
     Params: { saveId: string }
-    Querystring: { active?: string; season?: string }
+    Querystring: { active?: string; season?: string; loaned?: string }
   }>('/saves/:saveId/players', {
     schema: {
       tags: ['Players'],
       summary: 'Listar jogadores',
-      description: 'Sem query param: todos os jogadores com `totalStats`. Com `?active=true`: elenco ativo com stats da temporada atual + `ovrDelta`. Com `?active=true&season=2027/28`: elenco ativo naquela temporada.',
+      description: 'Sem query param: todos os jogadores com `totalStats`. Com `?active=true`: elenco ativo com stats da temporada atual + `ovrDelta`. Com `?active=true&season=2027/28`: elenco ativo naquela temporada. Com `?loaned=true`: jogadores emprestados pelo clube atual, com `loanedTo` e `loanSeason`.',
       params: {
         type: 'object',
         properties: {
@@ -38,6 +38,7 @@ export async function playersRoutes(app: FastifyInstance) {
         properties: {
           active: { type: 'string', enum: ['true'], description: 'Filtrar apenas jogadores ativos no clube atual' },
           season: { type: 'string', description: 'Temporada específica (ex: 2027/28). Padrão: temporada atual.' },
+          loaned: { type: 'string', enum: ['true'], description: 'Listar jogadores emprestados pelo clube atual' },
         },
       },
     },

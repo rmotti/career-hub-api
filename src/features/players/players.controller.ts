@@ -5,12 +5,13 @@ import { Position, PlayerStatus } from '@prisma/client'
 export async function listPlayers(
   request: FastifyRequest<{
     Params: { saveId: string }
-    Querystring: { active?: string; season?: string }
+    Querystring: { active?: string; season?: string; loaned?: string }
   }>,
   reply: FastifyReply
 ) {
-  const activeOnly = request.query.active === 'true'
-  const players = await playersService.listPlayers(request.params.saveId, activeOnly, request.query.season)
+  const loaned = request.query.loaned === 'true'
+  const activeOnly = !loaned && request.query.active === 'true'
+  const players = await playersService.listPlayers(request.params.saveId, activeOnly, request.query.season, loaned)
   return reply.send(players)
 }
 

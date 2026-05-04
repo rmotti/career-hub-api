@@ -29,11 +29,14 @@ function formatPlayer<T extends { marketValue: number | null; salary: number | n
   }
 }
 
-export async function listPlayers(saveId: string, activeOnly?: boolean, season?: string) {
+export async function listPlayers(saveId: string, activeOnly?: boolean, season?: string, loaned?: boolean) {
   let cacheKey: string
   let ttl: number
 
-  if (activeOnly) {
+  if (loaned) {
+    cacheKey = `save:${saveId}:players:loaned`
+    ttl = TTL.playersActive
+  } else if (activeOnly) {
     cacheKey = season
       ? `save:${saveId}:players:active:${season}`
       : `save:${saveId}:players:active`
@@ -46,7 +49,7 @@ export async function listPlayers(saveId: string, activeOnly?: boolean, season?:
   const cached = await cacheGet<unknown[]>(cacheKey)
   if (cached) return cached
 
-  const result = await fetchPlayers(saveId, activeOnly, season)
+  const result = loaned ? await fetchLoanedPlayers(saveId) : await fetchPlayers(saveId, activeOnly, season)
   await cacheSet(cacheKey, result, ttl)
   return result
 }
@@ -170,6 +173,89 @@ async function fetchPlayers(saveId: string, activeOnly?: boolean, season?: strin
         cleanSheets: t?.cleanSheets ?? 0,
         goalContributions: goals + assists,
       },
+    }
+  })
+}
+
+async function fetchLoanedPlayers(saveId: string) {
+  const save = await prisma.save.findUnique({
+    where: { id: saveId },
+    select: {
+      currentSeason: true,
+      clubStints: {
+        where: { isCurrent: true },
+        select: { id: true, club: true },
+      },
+    },
+  })
+  if (!save) throw new NotFoundError('Save não encontrado.')
+
+  const currentStint = save.clubStints[0]
+  if (!currentStint) return []
+
+  const loanedPlayers = await prisma.player.findMany({
+    where: {
+      saveId,
+      status: PlayerStatus.Loan,
+      activeClubStintId: null,
+      transfers: {
+        some: {
+          type: 'emprestimo_saida',
+          clubStintId: currentStint.id,
+        },
+      },
+    },
+    include: {
+      transfers: {
+        where: { type: 'emprestimo_saida', clubStintId: currentStint.id },
+        orderBy: { createdAt: 'desc' },
+        take: 1,
+        select: { to: true, season: true },
+      },
+    },
+  })
+
+  if (loanedPlayers.length === 0) return []
+
+  const playerIds = loanedPlayers.map(p => p.id)
+
+  const [seasonStatsRows, ovrHistoryRows] = await Promise.all([
+    prisma.playerSeasonStats.findMany({
+      where: { clubStintId: currentStint.id, season: save.currentSeason, playerId: { in: playerIds } },
+    }),
+    prisma.playerOvrHistory.findMany({
+      where: { playerId: { in: playerIds } },
+      orderBy: { createdAt: 'desc' },
+    }),
+  ])
+
+  const statsMap = new Map(seasonStatsRows.map(s => [s.playerId, s]))
+
+  const lastOvrMap = new Map<string, typeof ovrHistoryRows[number]>()
+  for (const h of ovrHistoryRows) {
+    if (!lastOvrMap.has(h.playerId)) lastOvrMap.set(h.playerId, h)
+  }
+
+  const sorted = [...loanedPlayers].sort(
+    (a, b) => POSITION_ORDER.indexOf(a.position) - POSITION_ORDER.indexOf(b.position)
+  )
+
+  return sorted.map(({ transfers, ...p }) => {
+    const s = statsMap.get(p.id) ?? null
+    const lastHistory = lastOvrMap.get(p.id) ?? null
+    const loanTransfer = transfers[0] ?? null
+    const stats = s
+      ? { ...s, goalContributions: s.goals + s.assists }
+      : { goals: 0, assists: 0, matches: 0, yellowCards: 0, redCards: 0, cleanSheets: 0, goalContributions: 0 }
+    return {
+      ...formatPlayer(p),
+      currentSeasonStats: stats,
+      ovrDelta: lastHistory !== null ? p.ovr - lastHistory.ovr : null,
+      marketValueDelta: (lastHistory !== null && p.marketValue !== null && lastHistory.marketValue !== null)
+        ? p.marketValue - lastHistory.marketValue
+        : null,
+      loanedTo: loanTransfer?.to ?? null,
+      loanSeason: loanTransfer?.season ?? null,
     }
   })
 }

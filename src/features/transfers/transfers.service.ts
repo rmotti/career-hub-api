@@ -208,7 +208,7 @@ export async function createTransfer(
     return { transfer: newTransfer, playerId: resolvedPlayerId, save: updatedSave }
   })
 
-  await cacheInvalidate(`save:${saveId}:transfers`, `save:${saveId}:transfers:current`)
+  await cacheInvalidate(`save:${saveId}:transfers`, `save:${saveId}:transfers:current`, `save:${saveId}:players:loaned`)
 
   return {
     transfer: formatTransferResponse(result.transfer),
