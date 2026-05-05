@@ -12,6 +12,8 @@ const nullableStr = { type: 'string', nullable: true }
 const fc26PlayerSchema = {
   type: 'object',
   properties: {
+    fitScore: { type: 'number', nullable: true },
+    fitConfidence: { type: 'string', nullable: true },
     id: { type: 'integer' },
     sofifaId: { type: 'integer' },
     name: { type: 'string' },
@@ -150,6 +152,8 @@ export async function fc26PlayersRoutes(app: FastifyInstance) {
           traits:       { type: 'string', description: 'Traits separados por vírgula', example: 'Power Shot,Rapid' },
           limit:        { type: 'integer', default: 20, description: 'Máx: 100' },
           offset:       { type: 'integer', default: 0 },
+          saveId:    { type: 'string', description: 'ID do save — quando fornecido, calcula o fit score de cada jogador para o clube atual' },
+          objective: { type: 'string', default: 'balanced', description: 'Objetivo do clube para o modelo de fit score (ex: balanced, attack, title)' },
         },
       },
       response: {

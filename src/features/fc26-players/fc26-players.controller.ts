@@ -25,6 +25,8 @@ interface ListQuerystring {
   traits?: string
   limit?: number
   offset?: number
+  saveId?: string
+  objective?: string
 }
 
 interface DetailParams {
@@ -40,7 +42,7 @@ export async function listFc26PlayersHandler(
   request: FastifyRequest<{ Querystring: ListQuerystring }>,
   reply: FastifyReply
 ) {
-  const { positions, primaryPositions, secondaryPositions, nations, clubs, leagues, traits, preferredFoot, ...rest } = request.query
+  const { positions, primaryPositions, secondaryPositions, nations, clubs, leagues, traits, preferredFoot, saveId, objective, ...rest } = request.query
 
   const result = await listFc26Players({
     ...rest,
@@ -52,6 +54,8 @@ export async function listFc26PlayersHandler(
     leagues: splitParam(leagues),
     traits: splitParam(traits),
     preferredFoot,
+    saveId,
+    objective,
   })
 
   return reply.send(result)
