@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client'
 import { prisma } from '../../shared/lib/prisma.js'
 import { AppError, NotFoundError } from '../../shared/utils/errors.js'
 import { listFc26Players, type Fc26PlayerFilters, type Fc26PlayerWithFitScore } from '../fc26-players/fc26-players.service.js'
@@ -188,7 +189,7 @@ function buildPlaybookData(input: ScoutPlaybookInput) {
   return {
     name,
     weights,
-    preferences: normalizePreferences(input.preferences) as unknown as Record<string, unknown>,
+    preferences: normalizePreferences(input.preferences) as unknown as Prisma.InputJsonValue,
   }
 }
 
@@ -196,7 +197,7 @@ function buildPartialPlaybookData(input: ScoutPlaybookUpdateInput) {
   const data: {
     name?: string
     weights?: ReturnType<typeof normalizeWeights>
-    preferences?: Record<string, unknown>
+    preferences?: Prisma.InputJsonValue
   } = {}
 
   if (input.name !== undefined) data.name = normalizeName(input.name)
@@ -207,7 +208,7 @@ function buildPartialPlaybookData(input: ScoutPlaybookUpdateInput) {
   }
 
   if (input.preferences !== undefined) {
-    data.preferences = normalizePreferences(input.preferences) as unknown as Record<string, unknown>
+    data.preferences = normalizePreferences(input.preferences) as unknown as Prisma.InputJsonValue
   }
 
   return data

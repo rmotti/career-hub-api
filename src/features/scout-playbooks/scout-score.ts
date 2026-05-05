@@ -4,6 +4,7 @@ import {
   SCOUT_FIT_OBJECTIVES,
   SCOUT_SCORE_COMPONENTS,
   ResolvedScoutPlaybook,
+  ScoutFitObjective,
   ScoutPlaybookInput,
   ScoutPlaybookPreferences,
   ScoutPlaybookWeights,
