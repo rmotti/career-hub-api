@@ -54,7 +54,7 @@ export function normalizeWeights(weights?: ScoutPlaybookWeights | null): Resolve
 
 export function normalizePreferences(preferences?: ScoutPlaybookPreferences | null): ScoutPlaybookPreferences {
   const raw = isRecord(preferences) ? preferences : {}
-  const objective = typeof raw.objective === 'string' && SCOUT_FIT_OBJECTIVES.includes(raw.objective as ScoutPlaybookPreferences['objective'])
+  const objective = typeof raw.objective === 'string' && SCOUT_FIT_OBJECTIVES.includes(raw.objective as ScoutFitObjective)
     ? raw.objective as ScoutPlaybookPreferences['objective']
     : DEFAULT_SCOUT_PLAYBOOK.preferences.objective
 

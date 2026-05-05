@@ -188,7 +188,7 @@ function buildPlaybookData(input: ScoutPlaybookInput) {
   return {
     name,
     weights,
-    preferences: normalizePreferences(input.preferences),
+    preferences: normalizePreferences(input.preferences) as unknown as Record<string, unknown>,
   }
 }
 
@@ -196,7 +196,7 @@ function buildPartialPlaybookData(input: ScoutPlaybookUpdateInput) {
   const data: {
     name?: string
     weights?: ReturnType<typeof normalizeWeights>
-    preferences?: ReturnType<typeof normalizePreferences>
+    preferences?: Record<string, unknown>
   } = {}
 
   if (input.name !== undefined) data.name = normalizeName(input.name)
@@ -207,7 +207,7 @@ function buildPartialPlaybookData(input: ScoutPlaybookUpdateInput) {
   }
 
   if (input.preferences !== undefined) {
-    data.preferences = normalizePreferences(input.preferences)
+    data.preferences = normalizePreferences(input.preferences) as unknown as Record<string, unknown>
   }
 
   return data

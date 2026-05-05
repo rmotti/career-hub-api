@@ -1,4 +1,5 @@
 import { FastifyInstance } from 'fastify'
+import { ScoutPlaybookUpdateInput } from './scout-playbooks.types.js'
 import * as controller from './scout-playbooks.controller.js'
 
 const weightsSchema = {
@@ -132,7 +133,7 @@ export async function scoutPlaybooksRoutes(app: FastifyInstance) {
     },
   }, controller.createPlaybookHandler)
 
-  app.patch<{ Params: { playbookId: string } }>('/scout/playbooks/:playbookId', {
+  app.patch<{ Params: { playbookId: string }; Body: ScoutPlaybookUpdateInput }>('/scout/playbooks/:playbookId', {
     schema: {
       tags: ['Scout Playbooks'],
       summary: 'Atualizar playbook do scout',
