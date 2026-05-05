@@ -16,6 +16,7 @@ import { transfersRoutes } from './features/transfers/transfers.routes.js'
 import { trophiesRoutes } from './features/trophies/trophies.routes.js'
 import { competitionsRoutes } from './features/competitions/competitions.routes.js'
 import { fc26PlayersRoutes } from './features/fc26-players/fc26-players.routes.js'
+import { scoutPlaybooksRoutes } from './features/scout-playbooks/scout-playbooks.routes.js'
 import { getTrustedOrigins, isTrustedOrigin } from './shared/utils/origins.js'
 
 export const app = Fastify({
@@ -62,6 +63,7 @@ app.register(swagger, {
       { name: 'Trophies', description: 'Troféus conquistados' },
       { name: 'Competitions', description: 'Competições disponíveis (liga, copa, europeia)' },
       { name: 'FC26 Players', description: 'Dataset de jogadores do FC26 — usado pelo módulo Scout' },
+      { name: 'Scout Playbooks', description: 'Playbooks configuráveis para calcular scout score' },
     ],
     components: {
       securitySchemes: {
@@ -104,6 +106,7 @@ app.register(async (protectedRoutes) => {
   protectedRoutes.register(trophiesRoutes, { prefix: '/api' })
   protectedRoutes.register(competitionsRoutes, { prefix: '/api' })
   protectedRoutes.register(fc26PlayersRoutes, { prefix: '/api' })
+  protectedRoutes.register(scoutPlaybooksRoutes, { prefix: '/api' })
 })
 
 app.setSchemaErrorFormatter((errors, _dataVar) => {

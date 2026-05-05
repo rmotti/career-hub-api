@@ -79,6 +79,23 @@ model Save {
   players       Player[]
   user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   transfers     Transfer[]
+  scoutPlaybooks ScoutPlaybook[]
+}
+
+model ScoutPlaybook {
+  id          String   @id @default(uuid())
+  saveId      String
+  name        String
+  weights     Json
+  preferences Json     @default("{}")
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  save        Save     @relation(fields: [saveId], references: [id], onDelete: Cascade)
+
+  @@unique([saveId, name])
+  @@index([saveId])
+  @@index([saveId, isDefault])
 }
 
 model ClubStint {
