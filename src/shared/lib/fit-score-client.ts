@@ -1,5 +1,3 @@
-const FIT_SCORE_URL = process.env.FIT_SCORE_SERVICE_URL
-
 export interface FitScoreCandidate {
   candidate_id: string
   candidate: {
@@ -23,10 +21,17 @@ export async function fetchFitScoreBatch(
   objective: string,
   candidates: FitScoreCandidate[]
 ): Promise<Map<string, FitScoreResult>> {
-  if (!FIT_SCORE_URL || !candidates.length) return new Map()
+  const fitScoreUrl = process.env.FIT_SCORE_SERVICE_URL?.replace(/\/+$/, '')
+
+  if (!candidates.length) return new Map()
+
+  if (!fitScoreUrl) {
+    warnFitScore('FIT_SCORE_SERVICE_URL is not configured')
+    return new Map()
+  }
 
   try {
-    const res = await fetch(`${FIT_SCORE_URL}/score/batch`, {
+    const res = await fetch(`${fitScoreUrl}/score/batch`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -38,7 +43,10 @@ export async function fetchFitScoreBatch(
       signal: AbortSignal.timeout(3000),
     })
 
-    if (!res.ok) return new Map()
+    if (!res.ok) {
+      warnFitScore(`score/batch returned HTTP ${res.status}`)
+      return new Map()
+    }
 
     const data = await res.json() as {
       results: Array<{ candidate_id: string } & FitScoreResult>
@@ -50,7 +58,13 @@ export async function fetchFitScoreBatch(
         { fit_score: r.fit_score, confidence: r.confidence, profile_size: r.profile_size },
       ])
     )
-  } catch {
+  } catch (error) {
+    warnFitScore(error instanceof Error ? error.message : 'score/batch request failed')
     return new Map()
   }
+}
+
+function warnFitScore(message: string) {
+  if (process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'test') return
+  console.warn(`[FitScore] ${message}`)
 }

@@ -14,6 +14,7 @@ const fc26PlayerSchema = {
   properties: {
     fitScore: { type: 'number', nullable: true },
     fitConfidence: { type: 'string', nullable: true },
+    fitProfileSize: { type: 'integer', nullable: true },
     id: { type: 'integer' },
     sofifaId: { type: 'integer' },
     name: { type: 'string' },

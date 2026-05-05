@@ -1,3 +1,5 @@
+import { MANUAL_CLUB_NAME_BY_LEAGUE_MAP } from './fit-score-club-aliases.generated.js'
+
 // Translates Fc26Player.league (dataset names) to fit-score-svc league codes
 export const LEAGUE_CODE: Record<string, string> = {
   'Premier League':             'GB1',
@@ -38,6 +40,23 @@ export const NATIONALITY_MAP: Record<string, string> = {
   'Cabo Verde':            'Cape Verde',
 }
 
+// Translates app/FC26 club names to the fit-score-svc club vocabulary.
+export const CLUB_NAME_MAP: Record<string, string> = {
+  'FC Barcelona':        'Barcelona',
+  'Manchester City':     'Man City',
+  'Manchester United':   'Man Utd',
+  'Paris Saint-Germain': 'PSG',
+  'Atlético de Madrid':  'Atlético Madrid',
+}
+
+export const CLUB_NAME_BY_LEAGUE_MAP: Record<string, Record<string, string>> = {
+  MLS: {
+    'Inter Miami':     'Miami',
+    'Real Salt Lake':  'Salt Lake',
+    'Sporting KC':     'Kansas City',
+  },
+}
+
 export function toLeagueCode(league: string | null | undefined): string | null {
   if (!league) return null
   return LEAGUE_CODE[league] ?? null
@@ -46,4 +65,17 @@ export function toLeagueCode(league: string | null | undefined): string | null {
 export function toNationality(nation: string | null | undefined): string | null {
   if (!nation) return null
   return NATIONALITY_MAP[nation] ?? nation
+}
+
+export function toFitScoreClubName(club: string, league?: string | null): string {
+  if (league) {
+    const leagueAliases = {
+      ...(CLUB_NAME_BY_LEAGUE_MAP[league] ?? {}),
+      ...(MANUAL_CLUB_NAME_BY_LEAGUE_MAP[league] ?? {}),
+    }
+
+    if (leagueAliases[club]) return leagueAliases[club]
+  }
+
+  return CLUB_NAME_MAP[club] ?? club
 }

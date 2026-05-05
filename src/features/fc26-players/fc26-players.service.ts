@@ -1,7 +1,8 @@
 import { prisma } from '../../shared/lib/prisma.js'
 import { cacheGet, cacheSet } from '../../shared/utils/cache.js'
 import { fetchFitScoreBatch, FitScoreCandidate, FitScoreResult } from '../../shared/lib/fit-score-client.js'
-import { toLeagueCode, toNationality } from '../../shared/utils/fit-score-maps.js'
+import { toFitScoreClubName, toLeagueCode, toNationality } from '../../shared/utils/fit-score-maps.js'
+import { findLeagueByClub } from '../clubs/clubs.service.js'
 import type { Fc26Player } from '@prisma/client'
 
 const TTL = {
@@ -58,6 +59,7 @@ export interface Fc26PlayerFilters {
 export type Fc26PlayerWithFitScore = Fc26Player & {
   fitScore: number | null
   fitConfidence: 'high' | 'medium' | 'low' | 'none' | null
+  fitProfileSize: number | null
 }
 
 function buildCacheKey(filters: Omit<Fc26PlayerFilters, 'saveId' | 'objective'>): string {
@@ -69,6 +71,9 @@ async function enrichWithFitScore(
   clubName: string,
   objective: string
 ): Promise<Fc26PlayerWithFitScore[]> {
+  const clubLeague = findLeagueByClub(clubName)
+  const fitScoreClubName = toFitScoreClubName(clubName, clubLeague)
+
   // Group players by their primary position's position group
   const groups = new Map<string, Fc26Player[]>()
   for (const player of players) {
@@ -81,7 +86,7 @@ async function enrichWithFitScore(
 
   await Promise.all(
     Array.from(groups.entries()).map(async ([positionGroup, groupPlayers]) => {
-      const cachePrefix = `fit-score:${clubName}:${positionGroup}:${objective}`
+      const cachePrefix = `fit-score:${fitScoreClubName}:${positionGroup}:${objective}`
 
       const uncached: Fc26Player[] = []
       for (const p of groupPlayers) {
@@ -106,7 +111,7 @@ async function enrichWithFitScore(
         },
       }))
 
-      const results = await fetchFitScoreBatch(clubName, positionGroup, objective, candidates)
+      const results = await fetchFitScoreBatch(fitScoreClubName, positionGroup, objective, candidates)
 
       for (const p of uncached) {
         const result = results.get(`sofifa_${p.sofifaId}`)
@@ -122,6 +127,7 @@ async function enrichWithFitScore(
     ...p,
     fitScore: scoreMap.get(p.sofifaId)?.fit_score ?? null,
     fitConfidence: (scoreMap.get(p.sofifaId)?.confidence ?? null) as Fc26PlayerWithFitScore['fitConfidence'],
+    fitProfileSize: scoreMap.get(p.sofifaId)?.profile_size ?? null,
   }))
 
   // Sort by fitScore desc when scores are available, nulls last

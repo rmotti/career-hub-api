@@ -15,7 +15,9 @@
     "db:seed-competitions": "tsx prisma/seed-competitions.ts",
     "db:migrate-data": "tsx prisma/migrate-data.ts",
     "db:studio": "prisma studio",
-    "db:seed-fc26": "tsx scripts/seed-fc26.ts"
+    "db:seed-fc26": "tsx scripts/seed-fc26.ts",
+    "fit-score:clubs:sync": "tsx scripts/sync-fit-score-club-aliases.ts",
+    "fit-score:clubs": "tsx scripts/generate-fit-score-club-alias-report.ts"
   },
   "dependencies": {
     "@fastify/compress": "^6.5.0",
