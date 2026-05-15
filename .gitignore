@@ -149,3 +149,4 @@ docs/
 # Dataset files (download via Kaggle + notebook)
 data/
 scripts/test-mcp-openai.ts
+scripts/test-mcp-tools-openai.ts

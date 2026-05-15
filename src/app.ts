@@ -19,6 +19,7 @@ import { fc26PlayersRoutes } from './features/fc26-players/fc26-players.routes.j
 import { scoutPlaybooksRoutes } from './features/scout-playbooks/scout-playbooks.routes.js'
 import { shortlistRoutes } from './features/shortlist/shortlist.routes.js'
 import { savedSearchesRoutes } from './features/saved-searches/saved-searches.routes.js'
+import { mcpPlugin } from './mcp/plugin.js'
 import { getTrustedOrigins, isTrustedOrigin } from './shared/utils/origins.js'
 
 export const app = Fastify({
@@ -96,6 +97,9 @@ app.get('/', { schema: { hide: true } }, (_request, reply) => {
 
 // Rotas públicas de autenticação
 app.register(authRoutes, { prefix: '/api' })
+
+// MCP — auth é resolvida internamente pelo plugin (Bearer token)
+app.register(mcpPlugin)
 
 // Rotas protegidas — requerem sessão válida
 app.register(async (protectedRoutes) => {
