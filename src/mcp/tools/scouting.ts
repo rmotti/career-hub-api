@@ -7,17 +7,7 @@ import {
 } from '../../features/scouting/scouting.service.js'
 import { formatBalance } from '../../shared/utils/currency.js'
 import type { McpContext } from '../context.js'
-
-async function resolveSaveId(userId: string, given: string | undefined): Promise<string | null> {
-  if (given) return given
-  const { prisma } = await import('../../shared/lib/prisma.js')
-  const save = await prisma.save.findFirst({
-    where: { userId },
-    orderBy: { updatedAt: 'desc' },
-    select: { id: true },
-  })
-  return save?.id ?? null
-}
+import { resolveSaveId } from '../utils.js'
 
 const severityEmoji = { critical: '🔴', moderate: '🟡', low: '🟢' }
 
