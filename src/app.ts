@@ -25,7 +25,13 @@ import { mcpPlugin } from './mcp/plugin.js'
 import { getTrustedOrigins, isTrustedOrigin } from './shared/utils/origins.js'
 
 export const app = Fastify({
-  logger: process.env.NODE_ENV !== 'production',
+  logger: {
+    level: process.env.LOG_LEVEL ?? 'info',
+    ...(process.env.NODE_ENV === 'production' && {
+      transport: undefined, // Pino JSON direto no stdout — Railway captura
+    }),
+  },
+  trustProxy: true,
   ajv: {
     customOptions: {
       keywords: ['example'],
@@ -165,7 +171,8 @@ app.setErrorHandler((error, _request, reply) => {
     })
   }
 
-  app.log.error(error)
+  app.log.error({ err: error }, 'Unhandled error')
+  console.error('[500]', error)
   return reply.status(500).send({
     error: 'Erro interno do servidor.',
     statusCode: 500,

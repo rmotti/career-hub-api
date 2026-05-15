@@ -20,7 +20,7 @@ export async function sendMessage(
 
   const { message, previousResponseId } = request.body
   const sessionToken = (request.headers.authorization ?? '').replace('Bearer ', '').trim()
-  const mcpBaseUrl = `${request.protocol}://${request.hostname}`
+  const mcpBaseUrl = process.env.API_URL ?? `${request.protocol}://${request.hostname}`
 
   const result = await chatService.sendMessage({ message, sessionToken, previousResponseId, mcpBaseUrl })
   return reply.send(result)
