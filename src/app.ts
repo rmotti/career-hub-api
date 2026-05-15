@@ -20,6 +20,7 @@ import { scoutPlaybooksRoutes } from './features/scout-playbooks/scout-playbooks
 import { shortlistRoutes } from './features/shortlist/shortlist.routes.js'
 import { savedSearchesRoutes } from './features/saved-searches/saved-searches.routes.js'
 import { scoutingRoutes } from './features/scouting/scouting.routes.js'
+import { chatRoutes } from './features/chat/chat.routes.js'
 import { mcpPlugin } from './mcp/plugin.js'
 import { getTrustedOrigins, isTrustedOrigin } from './shared/utils/origins.js'
 
@@ -71,6 +72,7 @@ app.register(swagger, {
       { name: 'Shortlist', description: 'Jogadores marcados para acompanhar dentro de um save' },
       { name: 'Saved Searches', description: 'Filtros de busca salvos por save' },
       { name: 'Scouting', description: 'Análise de elenco, busca de alvos e avaliação de contratações' },
+      { name: 'Chat', description: 'Assistente tático Mister — conversa com IA sobre o save' },
     ],
     components: {
       securitySchemes: {
@@ -120,6 +122,7 @@ app.register(async (protectedRoutes) => {
   protectedRoutes.register(shortlistRoutes, { prefix: '/api' })
   protectedRoutes.register(savedSearchesRoutes, { prefix: '/api' })
   protectedRoutes.register(scoutingRoutes, { prefix: '/api' })
+  protectedRoutes.register(chatRoutes, { prefix: '/api' })
 })
 
 app.setSchemaErrorFormatter((errors, _dataVar) => {
