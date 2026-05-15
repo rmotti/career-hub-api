@@ -80,6 +80,8 @@ model Save {
   user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   transfers     Transfer[]
   scoutPlaybooks ScoutPlaybook[]
+  shortlistItems ShortlistItem[]
+  savedSearches SavedSearch[]
 }
 
 model ScoutPlaybook {
@@ -96,6 +98,33 @@ model ScoutPlaybook {
   @@unique([saveId, name])
   @@index([saveId])
   @@index([saveId, isDefault])
+}
+
+model ShortlistItem {
+  id            String           @id @default(uuid())
+  saveId        String
+  fc26PlayerId  Int
+  notes         String?
+  priority      ShortlistPriority?
+  createdAt     DateTime         @default(now())
+  save          Save             @relation(fields: [saveId], references: [id], onDelete: Cascade)
+  fc26Player    Fc26Player       @relation(fields: [fc26PlayerId], references: [id], onDelete: Cascade)
+
+  @@unique([saveId, fc26PlayerId])
+  @@index([saveId])
+}
+
+model SavedSearch {
+  id        String   @id @default(uuid())
+  saveId    String
+  name      String
+  filters   Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  save      Save     @relation(fields: [saveId], references: [id], onDelete: Cascade)
+
+  @@unique([saveId, name])
+  @@index([saveId])
 }
 
 model ClubStint {
@@ -332,6 +361,8 @@ model Fc26Player {
   goalkeepingReflexes    Int?
   goalkeepingSpeed       Int?
 
+  shortlistItems ShortlistItem[]
+
   @@index([ovr])
   @@index([potential])
   @@index([age])
@@ -390,6 +421,12 @@ enum CupResult {
   OitavasOuFaseDeGrupos
   Eliminado
   NaoParticipou
+}
+
+enum ShortlistPriority {
+  LOW
+  MEDIUM
+  HIGH
 }
 
 enum CompetitionType {
