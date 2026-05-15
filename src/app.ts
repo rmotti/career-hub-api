@@ -19,6 +19,7 @@ import { fc26PlayersRoutes } from './features/fc26-players/fc26-players.routes.j
 import { scoutPlaybooksRoutes } from './features/scout-playbooks/scout-playbooks.routes.js'
 import { shortlistRoutes } from './features/shortlist/shortlist.routes.js'
 import { savedSearchesRoutes } from './features/saved-searches/saved-searches.routes.js'
+import { scoutingRoutes } from './features/scouting/scouting.routes.js'
 import { mcpPlugin } from './mcp/plugin.js'
 import { getTrustedOrigins, isTrustedOrigin } from './shared/utils/origins.js'
 
@@ -69,6 +70,7 @@ app.register(swagger, {
       { name: 'Scout Playbooks', description: 'Playbooks configuráveis para calcular scout score' },
       { name: 'Shortlist', description: 'Jogadores marcados para acompanhar dentro de um save' },
       { name: 'Saved Searches', description: 'Filtros de busca salvos por save' },
+      { name: 'Scouting', description: 'Análise de elenco, busca de alvos e avaliação de contratações' },
     ],
     components: {
       securitySchemes: {
@@ -117,6 +119,7 @@ app.register(async (protectedRoutes) => {
   protectedRoutes.register(scoutPlaybooksRoutes, { prefix: '/api' })
   protectedRoutes.register(shortlistRoutes, { prefix: '/api' })
   protectedRoutes.register(savedSearchesRoutes, { prefix: '/api' })
+  protectedRoutes.register(scoutingRoutes, { prefix: '/api' })
 })
 
 app.setSchemaErrorFormatter((errors, _dataVar) => {
