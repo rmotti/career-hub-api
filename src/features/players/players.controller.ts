@@ -92,6 +92,14 @@ export async function updatePlayerStats(
   return reply.send(stats)
 }
 
+export async function importFc26Squad(
+  request: FastifyRequest<{ Params: { saveId: string } }>,
+  reply: FastifyReply
+) {
+  const result = await playersService.importFc26Squad(request.params.saveId)
+  return reply.status(201).send(result)
+}
+
 export async function releasePlayer(
   request: FastifyRequest<{ Params: { saveId: string; playerId: string } }>,
   reply: FastifyReply

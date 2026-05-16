@@ -554,6 +554,85 @@ export async function updatePlayerStats(
   }
 }
 
+export async function importFc26Squad(saveId: string) {
+  const save = await prisma.save.findUnique({
+    where: { id: saveId },
+    include: { clubStints: { where: { isCurrent: true } } },
+  })
+  if (!save) throw new NotFoundError('Save não encontrado.')
+
+  const currentStint = save.clubStints[0]
+  if (!currentStint) {
+    throw new AppError('Nenhum clube ativo neste save.', 400)
+  }
+
+  const fc26Players = await prisma.fc26Player.findMany({
+    where: { club: currentStint.club },
+  })
+
+  if (fc26Players.length === 0) {
+    throw new NotFoundError(
+      `Nenhum jogador encontrado no dataset FC26 para o clube '${currentStint.club}'.`
+    )
+  }
+
+  const existing = await prisma.player.findMany({
+    where: { saveId },
+    select: { name: true },
+  })
+  const existingNames = new Set(existing.map((p) => p.name))
+
+  const toImport = fc26Players.filter((p) => !existingNames.has(p.name))
+  const skipped = fc26Players.length - toImport.length
+
+  if (toImport.length === 0) {
+    return { imported: 0, skipped, total: fc26Players.length }
+  }
+
+  await prisma.$transaction(async (tx) => {
+    for (const fc of toImport) {
+      const primary = fc.positions[0] as Position
+      if (!POSITION_VALUES.has(primary)) continue
+
+      const altSet = new Set<Position>()
+      for (const p of fc.positions.slice(1)) {
+        if (POSITION_VALUES.has(p as Position) && p !== primary) {
+          altSet.add(p as Position)
+        }
+      }
+
+      const created = await tx.player.create({
+        data: {
+          saveId,
+          activeClubStintId: currentStint.id,
+          name: fc.name,
+          position: primary,
+          age: fc.age,
+          status: PlayerStatus.Important,
+          ovr: fc.ovr,
+          potential: fc.potential,
+          nation: fc.nation,
+          marketValue: fc.marketValue,
+          salary: fc.wage,
+          alternativePosition: { positions: [...altSet] },
+        },
+      })
+
+      await tx.playerSeasonStats.create({
+        data: {
+          playerId: created.id,
+          clubStintId: currentStint.id,
+          season: save.currentSeason,
+        },
+      })
+    }
+  })
+
+  await invalidatePlayersCache(saveId)
+
+  return { imported: toImport.length, skipped, total: fc26Players.length }
+}
+
 export async function releasePlayer(saveId: string, playerId: string) {
   const player = await prisma.player.findFirst({ where: { id: playerId, saveId } })
   if (!player) throw new NotFoundError('Jogador não encontrado neste save.')

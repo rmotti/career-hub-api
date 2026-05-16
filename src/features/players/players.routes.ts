@@ -194,6 +194,24 @@ export async function playersRoutes(app: FastifyInstance) {
     playersController.updatePlayerStats
   )
 
+  app.post<{ Params: { saveId: string } }>(
+    '/saves/:saveId/players/import-fc26',
+    {
+      schema: {
+        tags: ['Players'],
+        summary: 'Importar elenco do dataset FC26',
+        description: 'Busca todos os jogadores do dataset FC26 cujo `club` bate com o clube atual do save e cria um Player + PlayerSeasonStats (zerado) para cada um. Jogadores cujo nome já existe no save são pulados. Status default: `Important`. Posições inválidas no dataset são ignoradas. Retorna `{ imported, skipped, total }`.',
+        params: {
+          type: 'object',
+          properties: {
+            saveId: { type: 'string' },
+          },
+        },
+      },
+    },
+    playersController.importFc26Squad
+  )
+
   app.delete<{ Params: { saveId: string; playerId: string } }>(
     '/saves/:saveId/players/:playerId/release',
     {
