@@ -56,6 +56,19 @@ app.register(compress, {
   encodings: ['gzip', 'br'],
 })
 
+// Allow requests with Content-Type: application/json but no body (e.g. POST with no payload)
+app.addContentTypeParser('application/json', { parseAs: 'string' }, (_req, body, done) => {
+  if (!body) {
+    done(null, {})
+    return
+  }
+  try {
+    done(null, JSON.parse(body as string))
+  } catch (err) {
+    done(err as Error)
+  }
+})
+
 app.register(swagger, {
   openapi: {
     info: {
@@ -168,6 +181,13 @@ app.setErrorHandler((error, _request, reply) => {
     return reply.status(400).send({
       error: error.message,
       statusCode: 400,
+    })
+  }
+
+  if (error.statusCode && error.statusCode < 500) {
+    return reply.status(error.statusCode).send({
+      error: error.message,
+      statusCode: error.statusCode,
     })
   }
 
