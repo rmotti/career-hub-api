@@ -1,7 +1,10 @@
 import { FastifyInstance } from 'fastify'
 import * as trophiesController from './trophies.controller.js'
+import { requireSaveOwnership } from '../../shared/utils/save-access.js'
 
 export async function trophiesRoutes(app: FastifyInstance) {
+  app.addHook('preHandler', requireSaveOwnership())
+
   app.get<{ Params: { saveId: string } }>(
     '/saves/:saveId/trophies',
     {

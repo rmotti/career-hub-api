@@ -1,9 +1,12 @@
 import { FastifyInstance } from 'fastify'
 import * as teamStatsController from './team-stats.controller.js'
+import { requireSaveOwnership } from '../../shared/utils/save-access.js'
 
 const CUP_RESULT_VALUES = ['Campeao', 'Final', 'Semifinal', 'Quartas', 'OitavasOuFaseDeGrupos', 'Eliminado', 'NaoParticipou'] as const
 
 export async function teamStatsRoutes(app: FastifyInstance) {
+  app.addHook('preHandler', requireSaveOwnership())
+
   app.get<{
     Params: { saveId: string }
     Querystring: { season?: string }

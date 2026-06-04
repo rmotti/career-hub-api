@@ -1,8 +1,11 @@
 import { FastifyInstance } from 'fastify'
 import { TransferType } from '@prisma/client'
 import * as transfersController from './transfers.controller.js'
+import { requireSaveOwnership } from '../../shared/utils/save-access.js'
 
 export async function transfersRoutes(app: FastifyInstance) {
+  app.addHook('preHandler', requireSaveOwnership())
+
   app.get<{
     Params: { saveId: string }
     Querystring: { season?: string }

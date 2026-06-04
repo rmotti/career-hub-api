@@ -1,6 +1,7 @@
 import { FastifyInstance } from 'fastify'
 import { Position, PlayerStatus } from '@prisma/client'
 import * as playersController from './players.controller.js'
+import { requireSaveOwnership } from '../../shared/utils/save-access.js'
 
 const POSITION_VALUES = ['GOL', 'LD', 'LE', 'ZAG', 'VOL', 'MC', 'ME', 'MD', 'MEI', 'PE', 'PD', 'SA', 'ATA'] as const
 
@@ -19,6 +20,8 @@ const alternativePositionSchema = {
 }
 
 export async function playersRoutes(app: FastifyInstance) {
+  app.addHook('preHandler', requireSaveOwnership())
+
   app.get<{
     Params: { saveId: string }
     Querystring: { active?: string; season?: string; loaned?: string }

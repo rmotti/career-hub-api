@@ -1,6 +1,7 @@
 import { ShortlistPriority } from '@prisma/client'
 import { prisma } from '../../shared/lib/prisma.js'
 import { AppError, NotFoundError } from '../../shared/utils/errors.js'
+import { assertSaveAccess } from '../../shared/utils/save-access.js'
 
 export interface ShortlistCreateInput {
   fc26PlayerId: number
@@ -92,11 +93,6 @@ export async function removeShortlistItem(saveId: string, itemId: string, userId
   if (!existing) throw new NotFoundError('Item da shortlist não encontrado.')
 
   await prisma.shortlistItem.delete({ where: { id: itemId } })
-}
-
-async function assertSaveAccess(saveId: string, userId: string) {
-  const save = await prisma.save.findFirst({ where: { id: saveId, userId }, select: { id: true } })
-  if (!save) throw new NotFoundError('Save não encontrado.')
 }
 
 function normalizeNotes(notes?: string | null) {

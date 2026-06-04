@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client'
 import { prisma } from '../../shared/lib/prisma.js'
 import { AppError, NotFoundError } from '../../shared/utils/errors.js'
+import { assertSaveAccess } from '../../shared/utils/save-access.js'
 import { listFc26Players, type Fc26PlayerFilters, type Fc26PlayerWithFitScore } from '../fc26-players/fc26-players.service.js'
 import { calculateScoutScore, normalizePreferences, normalizeWeights, resolveInlinePlaybook } from './scout-score.js'
 import {
@@ -161,15 +162,6 @@ async function resolveEvaluationPlaybook(input: ScoutEvaluateInput, userId: stri
   })
 
   return defaultPlaybook ? mapPlaybook(defaultPlaybook) : DEFAULT_SCOUT_PLAYBOOK
-}
-
-async function assertSaveAccess(saveId: string, userId: string) {
-  const save = await prisma.save.findFirst({
-    where: { id: saveId, userId },
-    select: { id: true },
-  })
-
-  if (!save) throw new NotFoundError('Save não encontrado.')
 }
 
 async function findPlaybookForUser(playbookId: string, userId: string) {
