@@ -143,8 +143,14 @@ vite.config.ts.timestamp-*
 .claude/**
 .vercel
 
-# Local docs
-docs/
+# Documentation — the curated API docs under docs/docs/ are published,
+# except the files below, which stay private (internal/sensitive).
+docs/docs/SECURITY-INTERNAL.md
+docs/docs/03_Technical/3.5_Technical_Debt.md
+docs/docs/02_Domain/2.2_Limitations_and_Risks.md
+docs/docs/03_Technical/3.8_Scaling_and_Performance.md
+docs/docs/.claude/
+docs/docs/.agents/
 
 # Dataset files (download via Kaggle + notebook)
 data/
