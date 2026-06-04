@@ -1,5 +1,6 @@
 import { FastifyRequest, FastifyReply } from 'fastify'
 import { AppError } from '../../shared/utils/errors.js'
+import { mintMcpToken } from '../../mcp/auth.js'
 import { checkChatRateLimit } from './chat.rate-limit.js'
 import * as chatService from './chat.service.js'
 
@@ -19,9 +20,11 @@ export async function sendMessage(
   }
 
   const { message, previousResponseId } = request.body
-  const sessionToken = (request.headers.authorization ?? '').replace('Bearer ', '').trim()
+  // Token efêmero com escopo MCP em vez do token de sessão completo: o token que
+  // transita pela OpenAI só dá acesso read-only ao MCP daquele usuário, por ~10 min.
+  const mcpToken = await mintMcpToken(request.user!.id)
   const mcpBaseUrl = process.env.API_URL ?? `${request.protocol}://${request.hostname}`
 
-  const result = await chatService.sendMessage({ message, sessionToken, previousResponseId, mcpBaseUrl })
+  const result = await chatService.sendMessage({ message, mcpToken, previousResponseId, mcpBaseUrl })
   return reply.send(result)
 }

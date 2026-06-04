@@ -6,7 +6,8 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
 
 export interface SendMessageOptions {
   message: string
-  sessionToken: string
+  /** Token efêmero com escopo MCP (não o token de sessão completo). Transita pela OpenAI. */
+  mcpToken: string
   mcpBaseUrl: string
   previousResponseId?: string
 }
@@ -17,7 +18,7 @@ export interface SendMessageResult {
 }
 
 export async function sendMessage(options: SendMessageOptions): Promise<SendMessageResult> {
-  const { message, sessionToken, mcpBaseUrl, previousResponseId } = options
+  const { message, mcpToken, mcpBaseUrl, previousResponseId } = options
 
   if (!process.env.OPENAI_API_KEY) {
     throw new AppError('OPENAI_API_KEY não configurada.', 500)
@@ -32,7 +33,7 @@ export async function sendMessage(options: SendMessageOptions): Promise<SendMess
         type: 'mcp',
         server_label: 'careerhub',
         server_url: `${mcpBaseUrl}/mcp`,
-        headers: { Authorization: `Bearer ${sessionToken}` },
+        headers: { Authorization: `Bearer ${mcpToken}` },
         require_approval: 'never',
       },
     ],

@@ -1,7 +1,8 @@
 import { FastifyRequest, FastifyReply } from 'fastify'
 import { auth } from '../lib/auth.js'
 import { AppError } from './errors.js'
-import { cacheGet, cacheSet, cacheInvalidate } from './cache.js'
+import { cacheGet, cacheInvalidate } from './cache.js'
+import { cacheSession } from './session-cache.js'
 
 type UserRole = 'admin' | 'user'
 type UserPlan = 'FREE' | 'PRO' | 'PREMIUM'
@@ -28,7 +29,7 @@ async function getSession(request: FastifyRequest) {
       query: Object.fromEntries(url.searchParams),
     })
 
-    if (session) await cacheSet(cacheKey, session, SESSION_TTL)
+    if (session?.user) await cacheSession(token, session.user.id, session, SESSION_TTL)
     return session
   }
 

@@ -1,8 +1,9 @@
+// Apenas origens EXATAS que controlamos. Nada de wildcards em `*.vercel.app`:
+// qualquer um pode criar um projeto Vercel cujo hostname casaria com o padrão,
+// virando uma origem confiável e credenciada (IDOR de origem). Previews legítimos
+// devem ser fixados via a env `TRUSTED_ORIGINS`.
 export const defaultTrustedOrigins = [
-  'https://fc-26-career-hub.vercel.app',
   'https://fc-career-hub.vercel.app',
-  'https://fc-26-career-hub-*.vercel.app',
-  'https://fc-career-*.vercel.app',
 ]
 
 export function getTrustedOrigins() {

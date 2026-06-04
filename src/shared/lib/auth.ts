@@ -3,6 +3,7 @@ import { prismaAdapter } from 'better-auth/adapters/prisma'
 import { admin, bearer } from 'better-auth/plugins'
 import { prisma } from './prisma.js'
 import { getTrustedOrigins } from '../utils/origins.js'
+import { invalidateUserSessions } from '../utils/session-cache.js'
 
 export const auth = betterAuth({
   secret: process.env.BETTER_AUTH_SECRET,
@@ -35,10 +36,23 @@ export const auth = betterAuth({
     },
   },
 
+  // Qualquer update no usuário (ban, troca de role/plano) invalida o cache de sessão
+  // dele, fechando a janela de revogação de até 5 min. Roda após o commit da transação.
+  databaseHooks: {
+    user: {
+      update: {
+        after: async (user) => {
+          await invalidateUserSessions(user.id)
+        },
+      },
+    },
+  },
+
   trustedOrigins: getTrustedOrigins(),
 
   rateLimit: {
-    enabled: process.env.DISABLE_RATE_LIMIT !== 'true',
+    // DISABLE_RATE_LIMIT é um foot-gun de load test: nunca deve desligar o limiter em produção.
+    enabled: process.env.NODE_ENV === 'production' || process.env.DISABLE_RATE_LIMIT !== 'true',
     window: 60,
     max: 100,
   },
