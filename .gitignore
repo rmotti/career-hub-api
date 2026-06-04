@@ -143,6 +143,9 @@ vite.config.ts.timestamp-*
 .claude/**
 .vercel
 
+# macOS
+.DS_Store
+
 # Documentation — the curated API docs under docs/docs/ are published,
 # except the files below, which stay private (internal/sensitive).
 docs/docs/SECURITY-INTERNAL.md
