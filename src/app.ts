@@ -5,7 +5,7 @@ import swagger from '@fastify/swagger'
 import swaggerUi from '@fastify/swagger-ui'
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library'
 import { AppError } from './shared/utils/errors.js'
-import { requireAuth } from './shared/utils/auth-hooks.js'
+import { requireAuth, requirePlan } from './shared/utils/auth-hooks.js'
 import { authRoutes } from './features/auth/auth.routes.js'
 import { clubsRoutes } from './features/clubs/clubs.routes.js'
 import { savesRoutes } from './features/saves/saves.routes.js'
@@ -136,12 +136,18 @@ app.register(async (protectedRoutes) => {
   protectedRoutes.register(transfersRoutes, { prefix: '/api' })
   protectedRoutes.register(trophiesRoutes, { prefix: '/api' })
   protectedRoutes.register(competitionsRoutes, { prefix: '/api' })
-  protectedRoutes.register(fc26PlayersRoutes, { prefix: '/api' })
-  protectedRoutes.register(scoutPlaybooksRoutes, { prefix: '/api' })
-  protectedRoutes.register(shortlistRoutes, { prefix: '/api' })
-  protectedRoutes.register(savedSearchesRoutes, { prefix: '/api' })
-  protectedRoutes.register(scoutingRoutes, { prefix: '/api' })
-  protectedRoutes.register(chatRoutes, { prefix: '/api' })
+
+  // Superfície PRO — exige plano PRO+ (admin sempre passa). Sem isto o paywall é só no frontend.
+  protectedRoutes.register(async (proRoutes) => {
+    proRoutes.addHook('preHandler', requirePlan('PRO'))
+
+    proRoutes.register(fc26PlayersRoutes, { prefix: '/api' })
+    proRoutes.register(scoutPlaybooksRoutes, { prefix: '/api' })
+    proRoutes.register(shortlistRoutes, { prefix: '/api' })
+    proRoutes.register(savedSearchesRoutes, { prefix: '/api' })
+    proRoutes.register(scoutingRoutes, { prefix: '/api' })
+    proRoutes.register(chatRoutes, { prefix: '/api' })
+  })
 })
 
 app.setSchemaErrorFormatter((errors, _dataVar) => {
