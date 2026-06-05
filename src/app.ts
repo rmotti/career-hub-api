@@ -5,7 +5,7 @@ import swagger from '@fastify/swagger'
 import swaggerUi from '@fastify/swagger-ui'
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library'
 import { AppError } from './shared/utils/errors.js'
-import { requireAuth, requirePlan } from './shared/utils/auth-hooks.js'
+import { requireAuth, requirePlan, csrfProtection } from './shared/utils/auth-hooks.js'
 import { authRoutes } from './features/auth/auth.routes.js'
 import { clubsRoutes } from './features/clubs/clubs.routes.js'
 import { savesRoutes } from './features/saves/saves.routes.js'
@@ -22,7 +22,7 @@ import { savedSearchesRoutes } from './features/saved-searches/saved-searches.ro
 import { scoutingRoutes } from './features/scouting/scouting.routes.js'
 import { chatRoutes } from './features/chat/chat.routes.js'
 import { mcpPlugin } from './mcp/plugin.js'
-import { getTrustedOrigins, isTrustedOrigin } from './shared/utils/origins.js'
+import { getTrustedOrigins, isCredentialedOriginAllowed } from './shared/utils/origins.js'
 
 export const app = Fastify({
   logger: {
@@ -42,12 +42,20 @@ export const app = Fastify({
 const trustedOrigins = getTrustedOrigins()
 
 app.register(cors, {
+  // Fluxo credenciado (cookie httpOnly): origin EXATO, nunca "*" (proibido com credentials)
+  // e sem wildcard (ver isCredentialedOriginAllowed).
   origin: process.env.NODE_ENV === 'production'
     ? (origin, callback) => {
-        callback(null, isTrustedOrigin(origin, trustedOrigins))
+        callback(null, isCredentialedOriginAllowed(origin, trustedOrigins))
       }
     : true,
   credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  // Authorization (Bearer legado) + X-CSRF-Token (double-submit do fluxo por cookie).
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token'],
+  // Permite o SPA ler o token CSRF da resposta (além do corpo do login).
+  exposedHeaders: ['X-CSRF-Token', 'set-auth-token'],
+  maxAge: 86400,
 })
 
 app.register(compress, {
@@ -126,6 +134,11 @@ app.register(mcpPlugin)
 
 // Rotas protegidas — requerem sessão válida
 app.register(async (protectedRoutes) => {
+  // CSRF no onRequest (fase mais cedo): roda ANTES da validação de body e do auth, então uma
+  // escrita forjada por cookie é rejeitada com 403 antes de parsear/validar o corpo (senão um
+  // body inválido retornaria 400 e mascararia o 403). Só precisa de headers/cookies, não do body.
+  // (Requisições por Bearer e métodos seguros passam direto — ver csrfProtection.)
+  protectedRoutes.addHook('onRequest', csrfProtection())
   protectedRoutes.addHook('preHandler', requireAuth())
 
   protectedRoutes.register(clubsRoutes, { prefix: '/api' })

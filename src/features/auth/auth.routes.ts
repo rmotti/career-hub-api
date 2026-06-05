@@ -1,6 +1,15 @@
-import { FastifyInstance } from 'fastify'
+import { FastifyInstance, FastifyReply } from 'fastify'
 import { auth } from '../../shared/lib/auth.js'
-import { invalidateSessionCache } from '../../shared/utils/auth-hooks.js'
+import { invalidateSessionCache, extractSessionToken } from '../../shared/utils/auth-hooks.js'
+import {
+  sessionCookie,
+  csrfCookie,
+  clearedSessionCookie,
+  clearedCsrfCookie,
+  generateCsrfToken,
+  parseCookies,
+  CSRF_COOKIE,
+} from '../../shared/utils/cookies.js'
 
 function toBetterAuthRequest(request: {
   url: string
@@ -19,6 +28,58 @@ function toBetterAuthRequest(request: {
         ? JSON.stringify(request.body)
         : undefined,
   })
+}
+
+/**
+ * Copia status/headers do Response do Better Auth para o reply do Fastify, mas:
+ * - trata `set-cookie` via `getSetCookie()` (o `forEach` junta múltiplos cookies numa string
+ *   inválida) e permite anexar cookies extras nossos;
+ * - omite `content-length`/`content-encoding` (o Fastify recalcula ao enviar o payload).
+ */
+function forwardHeaders(response: Response, reply: FastifyReply, extraCookies: string[] = []) {
+  const upstreamCookies =
+    typeof response.headers.getSetCookie === 'function' ? response.headers.getSetCookie() : []
+
+  response.headers.forEach((value, key) => {
+    const lower = key.toLowerCase()
+    if (lower === 'set-cookie' || lower === 'content-length' || lower === 'content-encoding') return
+    reply.header(key, value)
+  })
+
+  const cookies = [...upstreamCookies, ...extraCookies]
+  if (cookies.length > 0) reply.header('set-cookie', cookies)
+}
+
+/**
+ * Handler comum de sign-in/sign-up: encaminha a resposta do Better Auth e, no sucesso,
+ * emite o cookie httpOnly `session_token` (mesmo valor do `token` do corpo), o cookie
+ * `csrf_token` e devolve o `csrfToken` no corpo + header (o SPA não consegue ler cookies
+ * cross-site, então recebe o token CSRF por aqui). O `token` segue no corpo para a transição.
+ */
+async function handleSessionResponse(response: Response, reply: FastifyReply) {
+  const text = await response.text()
+
+  if (response.ok) {
+    try {
+      const body = JSON.parse(text) as { token?: string; [k: string]: unknown }
+      if (body && typeof body.token === 'string') {
+        const csrfToken = generateCsrfToken()
+        body.csrfToken = csrfToken
+
+        forwardHeaders(response, reply, [sessionCookie(body.token), csrfCookie(csrfToken)])
+        reply.header('X-CSRF-Token', csrfToken)
+        reply.header('content-type', 'application/json; charset=utf-8')
+        reply.status(response.status)
+        return reply.send(JSON.stringify(body))
+      }
+    } catch {
+      // corpo não-JSON ou inesperado → encaminha sem alterar
+    }
+  }
+
+  forwardHeaders(response, reply)
+  reply.status(response.status)
+  return reply.send(text)
 }
 
 export async function authRoutes(app: FastifyInstance) {
@@ -42,6 +103,7 @@ export async function authRoutes(app: FastifyInstance) {
           type: 'object',
           properties: {
             token: { type: 'string', description: 'Token de sessão' },
+            csrfToken: { type: 'string', description: 'Token CSRF — ecoe em X-CSRF-Token nas escritas' },
             user: {
               type: 'object',
               properties: {
@@ -58,9 +120,7 @@ export async function authRoutes(app: FastifyInstance) {
     },
   }, async (request, reply) => {
     const response = await auth.handler(toBetterAuthRequest(request as any))
-    reply.status(response.status)
-    response.headers.forEach((value, key) => reply.header(key, value))
-    return reply.send(await response.text())
+    return handleSessionResponse(response, reply)
   })
 
   app.post('/auth/sign-in/email', {
@@ -78,10 +138,11 @@ export async function authRoutes(app: FastifyInstance) {
       },
       response: {
         200: {
-          description: 'Login realizado com sucesso — copie o `token` e use como Bearer token nas demais rotas',
+          description: 'Login realizado com sucesso. Em produção o `session_token` vem via Set-Cookie httpOnly; o `token` segue no corpo para compat (Bearer). Use o `csrfToken` no header X-CSRF-Token nas escritas.',
           type: 'object',
           properties: {
             token: { type: 'string' },
+            csrfToken: { type: 'string', description: 'Token CSRF — ecoe em X-CSRF-Token nas escritas' },
             user: {
               type: 'object',
               properties: {
@@ -106,9 +167,7 @@ export async function authRoutes(app: FastifyInstance) {
     },
   }, async (request, reply) => {
     const response = await auth.handler(toBetterAuthRequest(request as any))
-    reply.status(response.status)
-    response.headers.forEach((value, key) => reply.header(key, value))
-    return reply.send(await response.text())
+    return handleSessionResponse(response, reply)
   })
 
   app.get('/auth/session', {
@@ -166,13 +225,45 @@ export async function authRoutes(app: FastifyInstance) {
       },
     },
   }, async (request, reply) => {
-    const token = ((request.headers as Record<string, string>).authorization ?? '').replace('Bearer ', '').trim()
+    // Token pode vir do cookie (novo fluxo) ou do Bearer (legado) — invalida o cache certo.
+    const token = extractSessionToken(request)
     const response = await auth.handler(toBetterAuthRequest(request as any))
     await invalidateSessionCache(token)
-    if (response.status >= 500) return reply.status(200).send({ success: true })
+
+    // Expira os cookies em qualquer caminho (inclusive no fallback de erro do Better Auth).
+    const clearedCookies = [clearedSessionCookie(), clearedCsrfCookie()]
+    if (response.status >= 500) {
+      reply.header('set-cookie', clearedCookies)
+      return reply.status(200).send({ success: true })
+    }
+    forwardHeaders(response, reply, clearedCookies)
     reply.status(response.status)
-    response.headers.forEach((value, key) => reply.header(key, value))
     return reply.send(await response.text())
+  })
+
+  // Reabastece o token CSRF. O SPA chama no boot (após reload perde o token da memória e
+  // não consegue ler o cookie cross-site). Devolve o token do cookie atual ou emite um novo.
+  app.get('/auth/csrf', {
+    schema: {
+      tags: ['Auth'],
+      summary: 'Token CSRF atual',
+      security: [],
+      response: {
+        200: {
+          description: 'Token CSRF para usar no header X-CSRF-Token das escritas',
+          type: 'object',
+          properties: {
+            csrfToken: { type: 'string' },
+          },
+        },
+      },
+    },
+  }, async (request, reply) => {
+    const existing = parseCookies(request)[CSRF_COOKIE]
+    const csrfToken = existing ?? generateCsrfToken()
+    if (!existing) reply.header('set-cookie', [csrfCookie(csrfToken)])
+    reply.header('X-CSRF-Token', csrfToken)
+    return reply.send({ csrfToken })
   })
 
   // Catch-all oculto — rotas internas do Better Auth (reset de senha, etc.)

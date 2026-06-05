@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { defaultTrustedOrigins, getTrustedOrigins, isTrustedOrigin } from '../origins.js'
+import {
+  defaultTrustedOrigins,
+  getTrustedOrigins,
+  isCredentialedOriginAllowed,
+  isTrustedOrigin,
+} from '../origins.js'
 
 describe('trusted origins', () => {
   it('trusts the production frontend domain', () => {
@@ -36,5 +41,26 @@ describe('trusted origins', () => {
     expect(getTrustedOrigins().filter((origin) => origin === 'https://custom.example.com')).toHaveLength(1)
 
     delete process.env.TRUSTED_ORIGINS
+  })
+})
+
+describe('isCredentialedOriginAllowed (cookie + credentials flow)', () => {
+  it('allows the exact production frontend origin', () => {
+    expect(isCredentialedOriginAllowed('https://fc-career-hub.vercel.app', defaultTrustedOrigins)).toBe(true)
+  })
+
+  it('allows requests with no Origin header (same-origin / non-browser)', () => {
+    expect(isCredentialedOriginAllowed(undefined, defaultTrustedOrigins)).toBe(true)
+  })
+
+  it('NEVER honors wildcard matches in the credentialed flow', () => {
+    // Mesmo configurado com wildcard, o fluxo credenciado só aceita origins exatos.
+    const withWildcard = ['https://fc-career-*.vercel.app', 'https://fc-career-hub.vercel.app']
+    expect(isCredentialedOriginAllowed('https://fc-career-evil.vercel.app', withWildcard)).toBe(false)
+    expect(isCredentialedOriginAllowed('https://fc-career-hub.vercel.app', withWildcard)).toBe(true)
+  })
+
+  it('rejects unrelated origins', () => {
+    expect(isCredentialedOriginAllowed('https://example.com', defaultTrustedOrigins)).toBe(false)
   })
 })

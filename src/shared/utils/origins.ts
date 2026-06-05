@@ -30,3 +30,16 @@ export function isTrustedOrigin(origin: string | undefined, trustedOrigins = get
     return wildcardToRegExp(trustedOrigin).test(origin)
   })
 }
+
+/**
+ * Matcher para o CORS COM credenciais (cookie httpOnly + `credentials: true`). Aqui wildcard
+ * é proibido: um padrão como `https://fc-*.vercel.app` deixaria qualquer projeto Vercel que
+ * casasse receber respostas credenciadas e ler/escrever o cookie de sessão. Exigimos origin
+ * EXATO. Previews legítimos devem ser fixados como origins exatos em `TRUSTED_ORIGINS`.
+ * `origin` ausente (same-origin / cliente não-browser) é permitido — o browser simplesmente
+ * não recebe `Access-Control-Allow-Origin` nesse caso.
+ */
+export function isCredentialedOriginAllowed(origin: string | undefined, trustedOrigins = getTrustedOrigins()) {
+  if (!origin) return true
+  return trustedOrigins.some((trustedOrigin) => !trustedOrigin.includes('*') && trustedOrigin === origin)
+}
