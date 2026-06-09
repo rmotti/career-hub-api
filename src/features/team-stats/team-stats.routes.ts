@@ -30,6 +30,55 @@ export async function teamStatsRoutes(app: FastifyInstance) {
     },
   }, teamStatsController.listTeamStats)
 
+  app.post<{
+    Params: { saveId: string }
+    Body: { competitionId: string; season?: string; clubStintId?: string }
+  }>(
+    '/saves/:saveId/team-stats',
+    {
+      schema: {
+        tags: ['Team Stats'],
+        summary: 'Registrar competição para o clube',
+        description: 'Adiciona uma competição (cria o TeamSeasonStats) que o clube vai disputar. Por padrão usa o clube atual e a temporada atual do save. Use para corrigir/ajustar quais competições o clube joga (ex.: trocar Champions por Europa League).',
+        params: {
+          type: 'object',
+          properties: {
+            saveId: { type: 'string', description: 'UUID do save' },
+          },
+        },
+        body: {
+          type: 'object',
+          required: ['competitionId'],
+          properties: {
+            competitionId: { type: 'string', description: 'UUID da competição (de /api/competitions)' },
+            season: { type: 'string', description: 'Temporada. Omitido = temporada atual do save', example: '2026/27' },
+            clubStintId: { type: 'string', description: 'UUID da passagem de clube. Omitido = clube atual' },
+          },
+        },
+      },
+    },
+    teamStatsController.addTeamStat
+  )
+
+  app.delete<{ Params: { saveId: string; statsId: string } }>(
+    '/saves/:saveId/team-stats/:statsId',
+    {
+      schema: {
+        tags: ['Team Stats'],
+        summary: 'Remover competição do clube',
+        description: 'Remove o registro de uma competição (TeamSeasonStats) — incluindo seus números. Use para apagar uma competição registrada por engano.',
+        params: {
+          type: 'object',
+          properties: {
+            saveId: { type: 'string' },
+            statsId: { type: 'string' },
+          },
+        },
+      },
+    },
+    teamStatsController.removeTeamStat
+  )
+
   app.patch<{
     Params: { saveId: string; statsId: string }
     Body: {

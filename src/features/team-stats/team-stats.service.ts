@@ -57,6 +57,74 @@ async function fetchTeamStats(saveId: string, seasonFilter?: string) {
   return allStats!
 }
 
+export async function addTeamStat(
+  saveId: string,
+  data: { competitionId: string; season?: string; clubStintId?: string }
+) {
+  const save = await prisma.save.findUnique({
+    where: { id: saveId },
+    include: { clubStints: { where: { isCurrent: true } } },
+  })
+  if (!save) throw new NotFoundError('Save não encontrado.')
+
+  // Resolve o stint alvo: o informado (validado contra o save) ou o atual.
+  let clubStintId = data.clubStintId
+  if (clubStintId) {
+    const stint = await prisma.clubStint.findFirst({
+      where: { id: clubStintId, saveId },
+      select: { id: true },
+    })
+    if (!stint) throw new NotFoundError('Passagem de clube não encontrada.')
+  } else {
+    const currentStint = save.clubStints[0]
+    if (!currentStint) throw new NotFoundError('Nenhum clube ativo encontrado para este save.')
+    clubStintId = currentStint.id
+  }
+
+  const competition = await prisma.competition.findUnique({
+    where: { id: data.competitionId },
+    select: { id: true },
+  })
+  if (!competition) throw new AppError('Competição inválida.', 400)
+
+  const season = data.season ?? save.currentSeason
+
+  const existing = await prisma.teamSeasonStats.findFirst({
+    where: { clubStintId, competitionId: data.competitionId, season },
+    select: { id: true },
+  })
+  if (existing) throw new AppError('Esta competição já está registrada para este clube nesta temporada.', 409)
+
+  const result = await prisma.teamSeasonStats.create({
+    data: { clubStintId, competitionId: data.competitionId, season },
+    include: { competition: true },
+  })
+
+  await cacheInvalidate(
+    `save:${saveId}:team-stats`,
+    `save:${saveId}:team-stats:${season}`,
+    `save:${saveId}:team-stats:current`,
+  )
+
+  return result
+}
+
+export async function removeTeamStat(saveId: string, statsId: string) {
+  const stats = await prisma.teamSeasonStats.findFirst({
+    where: { id: statsId, clubStint: { saveId } },
+    select: { id: true, season: true },
+  })
+  if (!stats) throw new NotFoundError('Estatísticas não encontradas.')
+
+  await prisma.teamSeasonStats.delete({ where: { id: statsId } })
+
+  await cacheInvalidate(
+    `save:${saveId}:team-stats`,
+    `save:${saveId}:team-stats:${stats.season}`,
+    `save:${saveId}:team-stats:current`,
+  )
+}
+
 export async function updateTeamStats(
   saveId: string,
   statsId: string,
