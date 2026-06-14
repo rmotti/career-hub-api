@@ -25,6 +25,11 @@ export const LEAGUE_CODE: Record<string, string> = {
   'Premiership':                'SC1',  // Scottish Premiership
   'První liga':                 'C1',   // Czech First League
   'Liga I':                     'RO1',  // Romanian Liga I
+  // Disambiguated names emitted by the FC26 ETL (collided league_name → real country).
+  // The model supports these origin leagues; without these entries they fell back to "unknown".
+  'Austrian Bundesliga':        'A1',   // Bundesliga collided with Germany
+  'Ukrainian Premier League':   'UKR1', // Premier League collided with England
+  'Saudi Pro League':           'SA1',  // Pro League collided with Belgium
 }
 
 // Translates Fc26Player.nation (dataset names) to fit-score-svc nationality strings.

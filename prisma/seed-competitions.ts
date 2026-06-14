@@ -22,6 +22,7 @@ const COMPETITIONS: { name: string; type: CompetitionType; country: string | nul
   { name: 'UEFA Champions League',      type: 'EuropeanCup', country: null      },
   { name: 'UEFA Europa League',         type: 'EuropeanCup', country: null      },
   { name: 'UEFA Conference League',     type: 'EuropeanCup', country: null      },
+  { name: 'UEFA Super Cup',             type: 'EuropeanCup', country: null      },
 ]
 
 async function main() {
