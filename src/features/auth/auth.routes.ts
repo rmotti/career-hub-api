@@ -52,9 +52,10 @@ function forwardHeaders(response: Response, reply: FastifyReply, extraCookies: s
 
 /**
  * Handler comum de sign-in/sign-up: encaminha a resposta do Better Auth e, no sucesso,
- * emite o cookie httpOnly `session_token` (mesmo valor do `token` do corpo), o cookie
- * `csrf_token` e devolve o `csrfToken` no corpo + header (o SPA não consegue ler cookies
- * cross-site, então recebe o token CSRF por aqui). O `token` segue no corpo para a transição.
+ * emite o cookie httpOnly `session_token`, o cookie `csrf_token` e devolve o `csrfToken`
+ * no corpo + header (o SPA não consegue ler cookies cross-site, então recebe o token CSRF
+ * por aqui). O `token` é usado APENAS para setar o cookie e é então removido do corpo —
+ * pós-cutover ele não vive mais em lugar acessível ao JS, fechando a brecha de XSS no login.
  */
 async function handleSessionResponse(response: Response, reply: FastifyReply) {
   const text = await response.text()
@@ -64,9 +65,11 @@ async function handleSessionResponse(response: Response, reply: FastifyReply) {
       const body = JSON.parse(text) as { token?: string; [k: string]: unknown }
       if (body && typeof body.token === 'string') {
         const csrfToken = generateCsrfToken()
+        const sessionToken = body.token
+        delete body.token // não expõe o token ao JS — vive só no cookie httpOnly
         body.csrfToken = csrfToken
 
-        forwardHeaders(response, reply, [sessionCookie(body.token), csrfCookie(csrfToken)])
+        forwardHeaders(response, reply, [sessionCookie(sessionToken), csrfCookie(csrfToken)])
         reply.header('X-CSRF-Token', csrfToken)
         reply.header('content-type', 'application/json; charset=utf-8')
         reply.status(response.status)
@@ -99,10 +102,9 @@ export async function authRoutes(app: FastifyInstance) {
       },
       response: {
         200: {
-          description: 'Conta criada com sucesso',
+          description: 'Conta criada com sucesso. O `session_token` vem via Set-Cookie httpOnly; use o `csrfToken` no header X-CSRF-Token nas escritas.',
           type: 'object',
           properties: {
-            token: { type: 'string', description: 'Token de sessão' },
             csrfToken: { type: 'string', description: 'Token CSRF — ecoe em X-CSRF-Token nas escritas' },
             user: {
               type: 'object',
@@ -138,10 +140,9 @@ export async function authRoutes(app: FastifyInstance) {
       },
       response: {
         200: {
-          description: 'Login realizado com sucesso. Em produção o `session_token` vem via Set-Cookie httpOnly; o `token` segue no corpo para compat (Bearer). Use o `csrfToken` no header X-CSRF-Token nas escritas.',
+          description: 'Login realizado com sucesso. O `session_token` vem via Set-Cookie httpOnly; use o `csrfToken` no header X-CSRF-Token nas escritas.',
           type: 'object',
           properties: {
-            token: { type: 'string' },
             csrfToken: { type: 'string', description: 'Token CSRF — ecoe em X-CSRF-Token nas escritas' },
             user: {
               type: 'object',
