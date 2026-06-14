@@ -36,7 +36,7 @@ export function extractSessionToken(request: FastifyRequest): string {
   return (request.headers.authorization ?? '').replace('Bearer ', '').trim()
 }
 
-async function getSession(request: FastifyRequest) {
+export async function getSession(request: FastifyRequest) {
   const token = extractSessionToken(request)
   const url = new URL(request.url, `${request.protocol}://${request.hostname}`)
   const query = Object.fromEntries(url.searchParams)

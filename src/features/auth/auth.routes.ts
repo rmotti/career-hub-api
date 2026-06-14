@@ -1,6 +1,6 @@
 import { FastifyInstance, FastifyReply } from 'fastify'
 import { auth } from '../../shared/lib/auth.js'
-import { invalidateSessionCache, extractSessionToken } from '../../shared/utils/auth-hooks.js'
+import { invalidateSessionCache, extractSessionToken, getSession } from '../../shared/utils/auth-hooks.js'
 import {
   sessionCookie,
   csrfCookie,
@@ -200,14 +200,26 @@ export async function authRoutes(app: FastifyInstance) {
             },
           },
         },
+        401: {
+          description: 'Não autenticado',
+          type: 'object',
+          properties: {
+            error: { type: 'string' },
+            statusCode: { type: 'number' },
+          },
+        },
       },
     },
   }, async (request, reply) => {
-    const response = await auth.handler(toBetterAuthRequest(request as any))
-    if (response.status === 404) return reply.status(200).send(null)
-    reply.status(response.status)
-    response.headers.forEach((value, key) => reply.header(key, value))
-    return reply.send(await response.text())
+    // Resolve a sessão pelo MESMO caminho do requireAuth: extrai o token do cookie httpOnly
+    // `session_token` (ou Bearer legado) e injeta como Bearer no Better Auth. Encaminhar a
+    // requisição crua não funciona cross-site — o Better Auth não reconhece o nosso cookie,
+    // então o SPA caía no login a cada refresh.
+    const session = await getSession(request)
+    if (!session?.user) {
+      return reply.status(401).send({ error: 'Não autenticado.', statusCode: 401 })
+    }
+    return reply.send(session)
   })
 
   app.post('/auth/sign-out', {

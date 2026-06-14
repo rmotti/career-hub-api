@@ -12,7 +12,7 @@ vi.mock('../cache.js', () => ({
 
 import { auth } from '../../lib/auth.js'
 import { cacheGet } from '../cache.js'
-import { requirePlan } from '../auth-hooks.js'
+import { requirePlan, getSession } from '../auth-hooks.js'
 
 const mockedGetSession = auth.api.getSession as unknown as ReturnType<typeof vi.fn>
 const mockedCacheGet = cacheGet as unknown as ReturnType<typeof vi.fn>
@@ -75,5 +75,55 @@ describe('requirePlan', () => {
     mockedGetSession.mockResolvedValue(null)
 
     await expect(requirePlan('PRO')(makeRequest(), reply)).rejects.toMatchObject({ statusCode: 401 })
+  })
+})
+
+describe('getSession', () => {
+  function requestWith(headers: Record<string, string>): FastifyRequest {
+    return {
+      headers,
+      url: '/api/auth/session',
+      protocol: 'http',
+      hostname: 'localhost',
+    } as unknown as FastifyRequest
+  }
+
+  it('injects the httpOnly session_token cookie as a Bearer header (the refresh path)', async () => {
+    mockedGetSession.mockResolvedValue(sessionWith({ id: 'u' }))
+
+    const session = await getSession(requestWith({ cookie: 'session_token=cookie-tok; csrf_token=x' }))
+
+    expect(session).toMatchObject({ user: { id: 'u' } })
+    expect(mockedGetSession).toHaveBeenCalledWith(
+      expect.objectContaining({ headers: { authorization: 'Bearer cookie-tok' } }),
+    )
+  })
+
+  it('falls back to the Authorization: Bearer header (legacy clients)', async () => {
+    mockedGetSession.mockResolvedValue(sessionWith({ id: 'u' }))
+
+    await getSession(requestWith({ authorization: 'Bearer header-tok' }))
+
+    expect(mockedGetSession).toHaveBeenCalledWith(
+      expect.objectContaining({ headers: { authorization: 'Bearer header-tok' } }),
+    )
+  })
+
+  it('prefers the cookie over the Bearer header when both are present', async () => {
+    mockedGetSession.mockResolvedValue(sessionWith({ id: 'u' }))
+
+    await getSession(requestWith({ cookie: 'session_token=cookie-tok', authorization: 'Bearer header-tok' }))
+
+    expect(mockedGetSession).toHaveBeenCalledWith(
+      expect.objectContaining({ headers: { authorization: 'Bearer cookie-tok' } }),
+    )
+  })
+
+  it('returns null when no token is present and Better Auth finds no session', async () => {
+    mockedGetSession.mockResolvedValue(null)
+
+    const session = await getSession(requestWith({}))
+
+    expect(session).toBeNull()
   })
 })
