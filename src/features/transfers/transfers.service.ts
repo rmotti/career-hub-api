@@ -1,6 +1,6 @@
 import { prisma } from '../../shared/lib/prisma.js'
 import { AppError, NotFoundError } from '../../shared/utils/errors.js'
-import { formatBalance, formatMarketValue } from '../../shared/utils/currency.js'
+import { formatBalance, formatMarketValue, millions } from '../../shared/utils/currency.js'
 import { TransferType, Position, PlayerStatus } from '@prisma/client'
 import { cacheGet, cacheSet, cacheInvalidate } from '../../shared/utils/cache.js'
 import { createSnapshot, writeAudit } from '../saves/snapshots.service.js'
@@ -19,14 +19,14 @@ function formatSaveResponse(save: { id: string; balance: number | null; budget: 
     currentSeason: save.currentSeason,
     currentYear: save.currentYear,
     balance: save.balance,
-    balanceFormatted: formatBalance(save.balance),
+    balanceFormatted: formatBalance(millions(save.balance)),
     budget: save.budget,
-    budgetFormatted: formatBalance(save.budget),
+    budgetFormatted: formatBalance(millions(save.budget)),
   }
 }
 
 function formatTransferResponse<T extends { fee: number | null }>(transfer: T) {
-  return { ...transfer, feeFormatted: formatMarketValue(transfer.fee) }
+  return { ...transfer, feeFormatted: formatMarketValue(millions(transfer.fee)) }
 }
 
 export async function listTransfers(saveId: string, seasonFilter?: string) {

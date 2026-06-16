@@ -1,7 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 import { prisma } from '../../shared/lib/prisma.js'
-import { formatBalance } from '../../shared/utils/currency.js'
+import { formatBalance, millions } from '../../shared/utils/currency.js'
 import type { McpContext } from '../context.js'
 
 export function registerSavesTools(server: McpServer, ctx: McpContext) {
@@ -42,8 +42,8 @@ export function registerSavesTools(server: McpServer, ctx: McpContext) {
         `- **ID:** ${save.id}`,
         `- **Clube atual:** ${club}`,
         `- **Temporada:** ${save.currentSeason} (ano ${save.currentYear})`,
-        `- **Orçamento de transferências:** ${formatBalance(save.budget)}`,
-        `- **Saldo do clube:** ${formatBalance(save.balance)}`,
+        `- **Orçamento de transferências:** ${formatBalance(millions(save.budget))}`,
+        `- **Saldo do clube:** ${formatBalance(millions(save.balance))}`,
         `- **Última atividade:** ${save.updatedAt.toISOString()}`,
       ].join('\n')
 

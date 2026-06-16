@@ -1,7 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 import { prisma } from '../../shared/lib/prisma.js'
-import { formatBalance, formatSalary } from '../../shared/utils/currency.js'
+import { formatBalance, formatSalary, millions, thousands } from '../../shared/utils/currency.js'
 import type { McpContext } from '../context.js'
 
 export function registerFinancesTools(server: McpServer, ctx: McpContext) {
@@ -52,9 +52,9 @@ export function registerFinancesTools(server: McpServer, ctx: McpContext) {
         ``,
         `| Item | Valor |`,
         `|---|---|`,
-        `| Orçamento de transferências | ${formatBalance(save.budget)} |`,
-        `| Saldo do clube | ${formatBalance(save.balance)} |`,
-        `| Folha salarial total (mensal) | ${formatSalary(totalWageBill)} |`,
+        `| Orçamento de transferências | ${formatBalance(millions(save.budget))} |`,
+        `| Saldo do clube | ${formatBalance(millions(save.balance))} |`,
+        `| Folha salarial total (mensal) | ${formatSalary(thousands(totalWageBill))} |`,
         `| Jogadores no elenco | ${squadSize} |`,
       ].join('\n')
 

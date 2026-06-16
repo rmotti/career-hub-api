@@ -2,7 +2,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { prisma } from '../../shared/lib/prisma.js'
 import { cacheGet, cacheSet } from '../../shared/utils/cache.js'
-import { formatBalance, formatSalary } from '../../shared/utils/currency.js'
+import { formatBalance, formatSalary, millions, thousands } from '../../shared/utils/currency.js'
 import { identifyGaps } from '../../features/scouting/scouting.service.js'
 import type { McpContext } from '../context.js'
 
@@ -70,9 +70,9 @@ export function registerDossierResource(server: McpServer, ctx: McpContext) {
       out.push(`**Clube:** ${stint?.club ?? '—'}  ·  **Temporada:** ${save.currentSeason} (ano ${save.currentYear})`)
       out.push('')
       out.push('## Finanças')
-      out.push(`- Orçamento de transferências: ${formatBalance(save.budget)}`)
-      out.push(`- Saldo do clube: ${formatBalance(save.balance)}`)
-      out.push(`- Folha salarial total: ${formatSalary(wageAgg?._sum.salary ?? null)}`)
+      out.push(`- Orçamento de transferências: ${formatBalance(millions(save.budget))}`)
+      out.push(`- Saldo do clube: ${formatBalance(millions(save.balance))}`)
+      out.push(`- Folha salarial total: ${formatSalary(thousands(wageAgg?._sum.salary ?? null))}`)
       out.push(`- Elenco: ${wageAgg?._count ?? 0} jogadores`)
       out.push('')
 

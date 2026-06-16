@@ -5,7 +5,7 @@ import {
   identifyGaps,
   searchTransferTargets,
 } from '../../features/scouting/scouting.service.js'
-import { formatBalance } from '../../shared/utils/currency.js'
+import { formatBalance, millions } from '../../shared/utils/currency.js'
 import type { McpContext } from '../context.js'
 import { resolveSaveId } from '../utils.js'
 
@@ -84,7 +84,7 @@ export function registerScoutingTools(server: McpServer, ctx: McpContext) {
         .map(
           (p) =>
             `| ${p.name} | ${p.positions.join('/')} | ${p.age} | ${p.ovr}/${p.potential} | ${formatBalance(
-              p.marketValue,
+              millions(p.marketValue),
             )} | ${p.club ?? '—'} | ${p.sofifaId} |`,
         )
         .join('\n')
@@ -127,10 +127,10 @@ export function registerScoutingTools(server: McpServer, ctx: McpContext) {
         `- OVR/POT: ${r.player.ovr}/${r.player.potential}`,
         `- Idade: ${r.player.age}`,
         `- Clube atual: ${r.player.club ?? '—'}`,
-        `- Valor de mercado: ${formatBalance(r.player.marketValue)}`,
+        `- Valor de mercado: ${formatBalance(millions(r.player.marketValue))}`,
         ``,
         `## Custo`,
-        `- Orçamento disponível: ${formatBalance(r.costAnalysis.budget)}`,
+        `- Orçamento disponível: ${formatBalance(millions(r.costAnalysis.budget))}`,
         `- Caberia no orçamento: ${r.costAnalysis.affordable ? 'sim' : 'não'}`,
         r.costAnalysis.pctOfBudget !== null
           ? `- % do orçamento: ${r.costAnalysis.pctOfBudget.toFixed(1)}%`
@@ -149,7 +149,7 @@ export function registerScoutingTools(server: McpServer, ctx: McpContext) {
               `|---|---|---|---|---|---|`,
               ...r.alternatives.map(
                 (a) =>
-                  `| ${a.name} | ${a.ovr}/${a.potential} | ${a.age} | ${formatBalance(a.marketValue)} | ${
+                  `| ${a.name} | ${a.ovr}/${a.potential} | ${a.age} | ${formatBalance(millions(a.marketValue))} | ${
                     a.club ?? '—'
                   } | ${a.sofifaId} |`,
               ),

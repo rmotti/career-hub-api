@@ -2,7 +2,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { prisma } from '../../shared/lib/prisma.js'
 import { cacheGet, cacheSet } from '../../shared/utils/cache.js'
-import { formatBalance, formatSalary } from '../../shared/utils/currency.js'
+import { formatBalance, formatSalary, millions, thousands } from '../../shared/utils/currency.js'
 import type {
   ScoutPlaybookPreferences,
   ScoutPlaybookWeights,
@@ -26,10 +26,10 @@ function renderPreferences(prefs: ScoutPlaybookPreferences | null): string {
     lines.push(`- **Faixa etária ideal:** ${prefs.idealAgeMin ?? '?'}–${prefs.idealAgeMax ?? '?'}`)
   }
   if (prefs.maxMarketValue !== undefined) {
-    lines.push(`- **Valor de mercado máximo:** ${formatBalance(prefs.maxMarketValue)}`)
+    lines.push(`- **Valor de mercado máximo:** ${formatBalance(millions(prefs.maxMarketValue))}`)
   }
   if (prefs.maxWage !== undefined) {
-    lines.push(`- **Salário máximo:** ${formatSalary(prefs.maxWage)}`)
+    lines.push(`- **Salário máximo:** ${formatSalary(thousands(prefs.maxWage))}`)
   }
   return lines.length ? lines.join('\n') : '_Sem preferências configuradas._'
 }

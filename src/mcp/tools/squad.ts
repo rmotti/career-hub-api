@@ -2,7 +2,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import type { Position } from '@prisma/client'
 import { z } from 'zod'
 import { prisma } from '../../shared/lib/prisma.js'
-import { formatSalary } from '../../shared/utils/currency.js'
+import { formatSalary, thousands } from '../../shared/utils/currency.js'
 import type { McpContext } from '../context.js'
 import { resolveSaveId } from '../utils.js'
 
@@ -60,7 +60,7 @@ export function registerSquadTools(server: McpServer, ctx: McpContext) {
         out.push('|---|---|---|---|---|---|---|')
         for (const p of inSector) {
           out.push(
-            `| ${p.shirtNumber ?? '—'} | ${p.name} | ${p.position} | ${p.age} | ${p.ovr} | ${p.status} | ${formatSalary(p.salary)} |`,
+            `| ${p.shirtNumber ?? '—'} | ${p.name} | ${p.position} | ${p.age} | ${p.ovr} | ${p.status} | ${formatSalary(thousands(p.salary))} |`,
           )
         }
         out.push('')

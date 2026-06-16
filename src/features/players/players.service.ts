@@ -1,6 +1,6 @@
 import { prisma } from '../../shared/lib/prisma.js'
 import { NotFoundError, AppError } from '../../shared/utils/errors.js'
-import { formatMarketValue, formatSalary } from '../../shared/utils/currency.js'
+import { formatMarketValue, formatSalary, millions, thousands } from '../../shared/utils/currency.js'
 import { Position, PlayerStatus } from '@prisma/client'
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library'
 import { cacheGet, cacheSet, cacheInvalidate, cacheInvalidatePattern } from '../../shared/utils/cache.js'
@@ -25,8 +25,8 @@ type AlternativePositionInput = {
 function formatPlayer<T extends { marketValue: number | null; salary: number | null }>(p: T) {
   return {
     ...p,
-    marketValueFormatted: formatMarketValue(p.marketValue),
-    salaryFormatted: formatSalary(p.salary),
+    marketValueFormatted: formatMarketValue(millions(p.marketValue)),
+    salaryFormatted: formatSalary(thousands(p.salary)),
   }
 }
 

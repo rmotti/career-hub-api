@@ -2,7 +2,7 @@ import { prisma } from '../../shared/lib/prisma.js'
 import { AppError, NotFoundError } from '../../shared/utils/errors.js'
 import { clubExists, findLeagueByClub, LEAGUE_TO_COUNTRY } from '../clubs/clubs.service.js'
 import { getCompetitionIdsByCountry } from '../competitions/competitions.service.js'
-import { formatBalance } from '../../shared/utils/currency.js'
+import { formatBalance, millions } from '../../shared/utils/currency.js'
 import { PlayerStatus, TransferType, type Save } from '@prisma/client'
 import { cacheGet, cacheSet, cacheInvalidate, cacheInvalidatePattern } from '../../shared/utils/cache.js'
 import { createSnapshot, writeAudit } from './snapshots.service.js'
@@ -35,8 +35,8 @@ export async function listSaves(userId: string) {
 function mapSaves(saves: Awaited<ReturnType<typeof prisma.save.findMany<{ include: { clubStints: true } }>>>) {
   return saves.map(({ clubStints, ...rest }) => ({
     ...rest,
-    budgetFormatted: formatBalance(rest.budget),
-    balanceFormatted: formatBalance(rest.balance),
+    budgetFormatted: formatBalance(millions(rest.budget)),
+    balanceFormatted: formatBalance(millions(rest.balance)),
     currentClubStint: clubStints[0] ?? null,
   }))
 }
@@ -75,8 +75,8 @@ async function fetchSaveById(saveId: string, userId: string) {
   const { clubStints, ...rest } = save
   return {
     ...rest,
-    budgetFormatted: formatBalance(rest.budget),
-    balanceFormatted: formatBalance(rest.balance),
+    budgetFormatted: formatBalance(millions(rest.budget)),
+    balanceFormatted: formatBalance(millions(rest.balance)),
     currentClubStint: currentStint,
     clubStints,
     availableSeasons: teamStats.map((s) => s.season),
@@ -140,8 +140,8 @@ export async function createSave(data: {
 
   return {
     ...newSave,
-    budgetFormatted: formatBalance(newSave.budget),
-    balanceFormatted: formatBalance(newSave.balance),
+    budgetFormatted: formatBalance(millions(newSave.budget)),
+    balanceFormatted: formatBalance(millions(newSave.balance)),
     currentClubStint: clubStint,
     clubStints: [clubStint],
     availableSeasons: ['2025/26'],
@@ -357,8 +357,8 @@ export async function updateSave(
     balance: updatedSave.balance,
     createdAt: updatedSave.createdAt,
     updatedAt: updatedSave.updatedAt,
-    budgetFormatted: formatBalance(updatedSave.budget),
-    balanceFormatted: formatBalance(updatedSave.balance),
+    budgetFormatted: formatBalance(millions(updatedSave.budget)),
+    balanceFormatted: formatBalance(millions(updatedSave.balance)),
     currentClubStint: currentStint,
     availableSeasons,
   }
@@ -374,8 +374,8 @@ export async function listDeletedSaves(userId: string) {
   })
   return saves.map((s) => ({
     ...s,
-    budgetFormatted: formatBalance(s.budget),
-    balanceFormatted: formatBalance(s.balance),
+    budgetFormatted: formatBalance(millions(s.budget)),
+    balanceFormatted: formatBalance(millions(s.balance)),
   }))
 }
 
