@@ -259,9 +259,7 @@ model TeamSeasonStats {
   losses            Int          @default(0)
   createdAt         DateTime     @default(now())
   updatedAt         DateTime     @updatedAt
-  europeanCupResult CupResult    @default(NaoParticipou)
   leaguePosition    Int?
-  nationalCupResult CupResult    @default(NaoParticipou)
   competitionId     String?
   cupResult         CupResult?
   clubStint         ClubStint    @relation(fields: [clubStintId], references: [id], onDelete: Cascade)

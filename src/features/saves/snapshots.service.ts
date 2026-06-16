@@ -201,10 +201,17 @@ export async function restoreSnapshot(saveId: string, snapshotId: string, userId
     const insert = async <T>(rows: T[], fn: (data: T[]) => Promise<unknown>) => {
       if (rows.length > 0) await fn(rows)
     }
+    // Snapshots tirados antes da migration que dropou as colunas legadas de cup ainda
+    // carregam europeanCupResult/nationalCupResult no JSON — remove-os para o createMany
+    // não rejeitar campos que não existem mais no schema.
+    const teamSeasonStats = (payload.teamSeasonStats as Array<Record<string, unknown>>).map(
+      ({ europeanCupResult, nationalCupResult, ...rest }) => rest
+    )
+
     await insert(payload.clubStints, (data) => tx.clubStint.createMany({ data: data as Prisma.ClubStintCreateManyInput[] }))
     await insert(payload.players, (data) => tx.player.createMany({ data: data as Prisma.PlayerCreateManyInput[] }))
     await insert(payload.transfers, (data) => tx.transfer.createMany({ data: data as Prisma.TransferCreateManyInput[] }))
-    await insert(payload.teamSeasonStats, (data) => tx.teamSeasonStats.createMany({ data: data as Prisma.TeamSeasonStatsCreateManyInput[] }))
+    await insert(teamSeasonStats, (data) => tx.teamSeasonStats.createMany({ data: data as Prisma.TeamSeasonStatsCreateManyInput[] }))
     await insert(payload.playerSeasonStats, (data) => tx.playerSeasonStats.createMany({ data: data as Prisma.PlayerSeasonStatsCreateManyInput[] }))
     await insert(payload.trophies, (data) => tx.trophy.createMany({ data: data as Prisma.TrophyCreateManyInput[] }))
     await insert(payload.playerOvrHistory, (data) => tx.playerOvrHistory.createMany({ data: data as Prisma.PlayerOvrHistoryCreateManyInput[] }))
