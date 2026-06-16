@@ -4,6 +4,8 @@ import { COACH_PERSONA } from './persona.js'
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
 
+const CHAT_MODEL = process.env.OPENAI_CHAT_MODEL ?? 'gpt-4o-mini'
+
 export interface SendMessageOptions {
   message: string
   /** Token efêmero com escopo MCP (não o token de sessão completo). Transita pela OpenAI. */
@@ -24,8 +26,8 @@ export async function sendMessage(options: SendMessageOptions): Promise<SendMess
     throw new AppError('OPENAI_API_KEY não configurada.', 500)
   }
 
-  const params: Record<string, unknown> = {
-    model: 'gpt-4o-mini',
+  const params: OpenAI.Responses.ResponseCreateParamsNonStreaming = {
+    model: CHAT_MODEL,
     instructions: COACH_PERSONA,
     input: message,
     tools: [
@@ -37,19 +39,15 @@ export async function sendMessage(options: SendMessageOptions): Promise<SendMess
         require_approval: 'never',
       },
     ],
+    ...(previousResponseId ? { previous_response_id: previousResponseId } : {}),
   }
 
-  if (previousResponseId) {
-    params.previous_response_id = previousResponseId
-  }
+  const response = await openai.responses.create(params)
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const response = await (openai.responses.create as any)(params)
-
-  const reply: string | undefined = response.output_text
+  const reply = response.output_text
   if (!reply) {
     throw new AppError('O modelo não retornou resposta.', 502)
   }
 
-  return { reply, responseId: response.id as string }
+  return { reply, responseId: response.id }
 }
