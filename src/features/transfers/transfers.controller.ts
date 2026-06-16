@@ -67,3 +67,15 @@ export async function deleteTransfer(
   await transfersService.deleteTransfer(request.params.saveId, request.params.tid)
   return reply.status(204).send()
 }
+
+export async function reverseTransfer(
+  request: FastifyRequest<{ Params: { saveId: string; tid: string } }>,
+  reply: FastifyReply
+) {
+  const result = await transfersService.reverseTransfer(
+    request.params.saveId,
+    request.params.tid,
+    request.user!.id
+  )
+  return reply.send(result)
+}

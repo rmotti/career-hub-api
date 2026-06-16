@@ -4,6 +4,7 @@ import { formatMarketValue, formatSalary } from '../../shared/utils/currency.js'
 import { Position, PlayerStatus } from '@prisma/client'
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library'
 import { cacheGet, cacheSet, cacheInvalidate } from '../../shared/utils/cache.js'
+import { createSnapshot, writeAudit } from '../saves/snapshots.service.js'
 
 const TTL = {
   playersList: 60 * 60,        // 1h
@@ -554,7 +555,7 @@ export async function updatePlayerStats(
   }
 }
 
-export async function importFc26Squad(saveId: string) {
+export async function importFc26Squad(saveId: string, userId: string) {
   const save = await prisma.save.findUnique({
     where: { id: saveId },
     include: { clubStints: { where: { isCurrent: true } } },
@@ -590,6 +591,16 @@ export async function importFc26Squad(saveId: string) {
   }
 
   await prisma.$transaction(async (tx) => {
+    // Import em massa (cria dezenas de jogadores): snapshot de segurança + auditoria antes,
+    // para um "desfazer importação" via restore do snapshot.
+    await createSnapshot(tx, saveId, userId, 'pre-fc26-import')
+    await writeAudit(tx, {
+      userId,
+      saveId,
+      action: 'squad.import',
+      meta: { club: currentStint.club, importing: toImport.length, skipped },
+    })
+
     for (const fc of toImport) {
       const primary = fc.positions[0] as Position
       if (!POSITION_VALUES.has(primary)) continue
@@ -633,13 +644,24 @@ export async function importFc26Squad(saveId: string) {
   return { imported: toImport.length, skipped, total: fc26Players.length }
 }
 
-export async function releasePlayer(saveId: string, playerId: string) {
+export async function releasePlayer(saveId: string, playerId: string, userId: string) {
   const player = await prisma.player.findFirst({ where: { id: playerId, saveId } })
   if (!player) throw new NotFoundError('Jogador não encontrado neste save.')
 
-  const result = await prisma.player.update({
-    where: { id: playerId },
-    data: { activeClubStintId: null },
+  // Liberar tira o jogador do elenco (destrutivo): snapshot de segurança + auditoria antes,
+  // para que dê pra reverter via o restore do save. `fromClubStintId` fica no audit p/ rastreio.
+  const result = await prisma.$transaction(async (tx) => {
+    await createSnapshot(tx, saveId, userId, 'pre-player-release')
+    await writeAudit(tx, {
+      userId,
+      saveId,
+      action: 'player.release',
+      meta: { playerId, playerName: player.name, fromClubStintId: player.activeClubStintId },
+    })
+    return tx.player.update({
+      where: { id: playerId },
+      data: { activeClubStintId: null },
+    })
   })
 
   await invalidatePlayersCache(saveId, playerId)

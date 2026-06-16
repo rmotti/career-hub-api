@@ -96,7 +96,7 @@ export async function importFc26Squad(
   request: FastifyRequest<{ Params: { saveId: string } }>,
   reply: FastifyReply
 ) {
-  const result = await playersService.importFc26Squad(request.params.saveId)
+  const result = await playersService.importFc26Squad(request.params.saveId, request.user!.id)
   return reply.status(201).send(result)
 }
 
@@ -106,7 +106,8 @@ export async function releasePlayer(
 ) {
   const player = await playersService.releasePlayer(
     request.params.saveId,
-    request.params.playerId
+    request.params.playerId,
+    request.user!.id
   )
   return reply.send(player)
 }

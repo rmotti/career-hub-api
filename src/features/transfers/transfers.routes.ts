@@ -117,7 +117,8 @@ Toda a operação é feita em transação Prisma.`,
     {
       schema: {
         tags: ['Transfers'],
-        summary: 'Deletar transferência',
+        summary: 'Deletar transferência (apenas o registro)',
+        description: 'Remove só a linha da transferência, **sem** reverter saldo/elenco. Para desfazer uma transferência por completo (ex.: vendeu o jogador errado), use `POST .../reverse`.',
         params: {
           type: 'object',
           properties: {
@@ -128,5 +129,24 @@ Toda a operação é feita em transação Prisma.`,
       },
     },
     transfersController.deleteTransfer
+  )
+
+  app.post<{ Params: { saveId: string; tid: string } }>(
+    '/saves/:saveId/transfers/:tid/reverse',
+    {
+      schema: {
+        tags: ['Transfers'],
+        summary: 'Reverter transferência (desfaz saldo + elenco)',
+        description: 'Desfaz os efeitos da transferência: devolve o saldo, recoloca (saída) ou retira (entrada) o jogador do elenco, e apaga o registro. Tira um snapshot de segurança antes.',
+        params: {
+          type: 'object',
+          properties: {
+            saveId: { type: 'string' },
+            tid: { type: 'string' },
+          },
+        },
+      },
+    },
+    transfersController.reverseTransfer
   )
 }

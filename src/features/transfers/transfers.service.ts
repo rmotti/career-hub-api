@@ -3,6 +3,7 @@ import { AppError, NotFoundError } from '../../shared/utils/errors.js'
 import { formatBalance, formatMarketValue } from '../../shared/utils/currency.js'
 import { TransferType, Position, PlayerStatus } from '@prisma/client'
 import { cacheGet, cacheSet, cacheInvalidate } from '../../shared/utils/cache.js'
+import { createSnapshot, writeAudit } from '../saves/snapshots.service.js'
 
 const TTL_TRANSFERS = 60 * 30 // 30 min
 
@@ -277,4 +278,75 @@ export async function deleteTransfer(saveId: string, tid: string) {
 
   await prisma.transfer.delete({ where: { id: tid } })
   await cacheInvalidate(`save:${saveId}:transfers`, `save:${saveId}:transfers:current`)
+}
+
+/**
+ * Reverte uma transferência DESFAZENDO seus efeitos colaterais (o `deleteTransfer` apenas
+ * apaga a linha e deixa saldo e elenco inconsistentes). Reverte o saldo, recoloca/retira o
+ * jogador do elenco conforme o tipo e remove o registro. Tira um snapshot de segurança e
+ * audita a ação. Resolve o caso "vendi o jogador errado": dinheiro e jogador voltam.
+ */
+export async function reverseTransfer(saveId: string, tid: string, userId: string) {
+  const transfer = await prisma.transfer.findFirst({ where: { id: tid, saveId } })
+  if (!transfer) throw new NotFoundError('Transferência não encontrada.')
+
+  const save = await prisma.save.findUnique({
+    where: { id: saveId },
+    select: { id: true, balance: true, clubStints: { where: { isCurrent: true }, select: { id: true } } },
+  })
+  if (!save) throw new NotFoundError('Save não encontrado.')
+  const fallbackStintId = save.clubStints[0]?.id ?? null
+
+  await prisma.$transaction(async (tx) => {
+    // Rede de segurança: snapshot completo + auditoria antes de reverter.
+    await createSnapshot(tx, saveId, userId, 'pre-transfer-reverse')
+    await writeAudit(tx, {
+      userId,
+      saveId,
+      action: 'transfer.reverse',
+      meta: { transferId: tid, type: transfer.type, playerName: transfer.playerName, fee: transfer.fee ?? null },
+    })
+
+    // 1) Reverte o efeito no saldo (só compra/venda mexem em dinheiro).
+    const fee = transfer.fee ?? 0
+    if (fee > 0) {
+      const balance = save.balance ?? 0
+      if (transfer.type === TransferType.compra) {
+        await tx.save.update({ where: { id: saveId }, data: { balance: balance + fee } })
+      } else if (transfer.type === TransferType.venda) {
+        await tx.save.update({ where: { id: saveId }, data: { balance: balance - fee } })
+      }
+    }
+
+    // 2) Reverte o estado do jogador no elenco.
+    if (transfer.playerId) {
+      if (VENDA_TYPES.includes(transfer.type)) {
+        // Saída revertida → jogador volta ao elenco (no stint de onde saiu).
+        await tx.player.update({
+          where: { id: transfer.playerId },
+          data: { activeClubStintId: transfer.clubStintId ?? fallbackStintId, status: PlayerStatus.Role },
+        })
+      } else if (COMPRA_TYPES.includes(transfer.type)) {
+        // Entrada revertida → jogador sai do elenco (vira inativo).
+        await tx.player.update({
+          where: { id: transfer.playerId },
+          data: { activeClubStintId: null },
+        })
+      }
+    }
+
+    // 3) Remove o registro da transferência.
+    await tx.transfer.delete({ where: { id: tid } })
+  })
+
+  await cacheInvalidate(
+    `save:${saveId}:transfers`,
+    `save:${saveId}:transfers:current`,
+    `save:${saveId}:players`,
+    `save:${saveId}:players:active`,
+    `save:${saveId}:players:loaned`,
+    ...(transfer.playerId ? [`save:${saveId}:player:${transfer.playerId}`] : []),
+  )
+
+  return { reversed: true as const }
 }

@@ -72,6 +72,7 @@ model Save {
   currentSeason String      @default("2026/27")
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
+  deletedAt     DateTime?
   budget        Float?
   balance       Float?
   userId        String
@@ -82,6 +83,38 @@ model Save {
   scoutPlaybooks ScoutPlaybook[]
   shortlistItems ShortlistItem[]
   savedSearches SavedSearch[]
+  snapshots     SaveSnapshot[]
+
+  @@index([userId, deletedAt])
+}
+
+// Snapshot completo da árvore de um save (dump JSON), tirado antes de operações
+// irreversíveis (avanço de temporada, delete) para permitir undo/restore. FK em cascade:
+// um purge definitivo do save também remove seus snapshots (terminal por design).
+model SaveSnapshot {
+  id        String   @id @default(uuid())
+  saveId    String
+  userId    String
+  reason    String
+  payload   Json
+  createdAt DateTime @default(now())
+  save      Save     @relation(fields: [saveId], references: [id], onDelete: Cascade)
+
+  @@index([saveId, createdAt(sort: Desc)])
+}
+
+// Trilha de auditoria para mutações irreversíveis. Sem FK ao Save: sobrevive ao purge
+// (um log de "deletei o save X" não deve sumir quando o save some).
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String
+  saveId    String?
+  action    String
+  meta      Json?
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([saveId])
 }
 
 model ScoutPlaybook {

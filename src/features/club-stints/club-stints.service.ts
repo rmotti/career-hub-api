@@ -2,6 +2,7 @@ import { prisma } from '../../shared/lib/prisma.js'
 import { AppError, NotFoundError } from '../../shared/utils/errors.js'
 import { clubExists, findLeagueByClub, LEAGUE_TO_COUNTRY } from '../clubs/clubs.service.js'
 import { cacheGet, cacheSet, cacheInvalidate } from '../../shared/utils/cache.js'
+import { createSnapshot, writeAudit } from '../saves/snapshots.service.js'
 
 const TTL_CLUB_STINTS = 60 * 60 // 1h
 
@@ -33,7 +34,7 @@ export async function getCurrentClubStint(saveId: string) {
   return current
 }
 
-export async function createClubStint(saveId: string, data: { club: string; europeanCompetitionId?: string | null }) {
+export async function createClubStint(saveId: string, data: { club: string; europeanCompetitionId?: string | null }, userId: string) {
   if (!clubExists(data.club)) {
     throw new AppError(`Clube inválido: '${data.club}' não encontrado na lista de clubes disponíveis.`, 400)
   }
@@ -57,6 +58,16 @@ export async function createClubStint(saveId: string, data: { club: string; euro
   })
 
   const newStint = await prisma.$transaction(async (tx) => {
+    // Trocar de clube é destrutivo (desvincula o elenco inteiro): snapshot de segurança +
+    // auditoria antes de qualquer mutação, atômico com a troca. Undo via restore do snapshot.
+    await createSnapshot(tx, saveId, userId, 'pre-club-change')
+    await writeAudit(tx, {
+      userId,
+      saveId,
+      action: 'clubstint.change',
+      meta: { from: currentStint?.club ?? null, to: data.club, season: save.currentSeason },
+    })
+
     const [countryCompetitions, currentEuropeanStats] = await Promise.all([
       country
         ? tx.competition.findMany({

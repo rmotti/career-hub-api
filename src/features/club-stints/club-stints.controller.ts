@@ -23,7 +23,8 @@ export async function createClubStint(
 ) {
   const stint = await clubStintsService.createClubStint(
     request.params.saveId,
-    request.body
+    request.body,
+    request.user!.id
   )
   return reply.status(201).send(stint)
 }

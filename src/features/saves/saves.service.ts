@@ -5,6 +5,7 @@ import { getCompetitionIdsByCountry } from '../competitions/competitions.service
 import { formatBalance } from '../../shared/utils/currency.js'
 import { PlayerStatus, TransferType, type Save } from '@prisma/client'
 import { cacheGet, cacheSet, cacheInvalidate, cacheInvalidatePattern } from '../../shared/utils/cache.js'
+import { createSnapshot, writeAudit } from './snapshots.service.js'
 
 const TTL = {
   savesList: 60 * 15,  // 15min
@@ -17,7 +18,7 @@ export async function listSaves(userId: string) {
   if (cached) return cached
 
   const saves = await prisma.save.findMany({
-    where: { userId },
+    where: { userId, deletedAt: null },
     include: {
       clubStints: {
         where: { isCurrent: true },
@@ -58,6 +59,7 @@ async function fetchSaveById(saveId: string, userId: string) {
 
   if (!save) throw new NotFoundError('Save não encontrado.')
   if (save.userId !== userId) throw new NotFoundError('Save não encontrado.')
+  if (save.deletedAt) throw new NotFoundError('Save não encontrado.')
 
   const currentStint = save.clubStints.find((cs) => cs.isCurrent) ?? null
 
@@ -175,6 +177,7 @@ export async function updateSave(
 
   if (!save) throw new NotFoundError('Save não encontrado.')
   if (save.userId !== userId) throw new NotFoundError('Save não encontrado.')
+  if (save.deletedAt) throw new NotFoundError('Save não encontrado.')
 
   const seasonChanged = data.currentSeason && data.currentSeason !== save.currentSeason
 
@@ -185,6 +188,16 @@ export async function updateSave(
   await prisma.$transaction(async (tx) => {
     if (seasonChanged && save.clubStints[0]) {
       const currentStint = save.clubStints[0]
+
+      // Avanço de temporada é irreversível: tira um snapshot antes de qualquer mutação
+      // (dentro da mesma transação, então é atômico com o avanço) e audita a ação.
+      await createSnapshot(tx, saveId, userId, 'pre-season-advance')
+      await writeAudit(tx, {
+        userId,
+        saveId,
+        action: 'save.season_advance',
+        meta: { from: save.currentSeason, to: data.currentSeason },
+      })
 
       // Verificar se alguma competição da temporada que está encerrando teve campeão
       const endingStats = await tx.teamSeasonStats.findMany({
@@ -305,6 +318,21 @@ export async function updateSave(
     }
 
     txUpdatedSave = await tx.save.update({ where: { id: saveId }, data: saveData })
+
+    // Edição direta de dinheiro (fora do avanço de temporada): registra antes→depois no
+    // audit para rastreio e eventual reversão manual. Avanço já é auditado como season_advance.
+    if (!seasonChanged) {
+      const financeMeta: Record<string, { from: number | null; to: number }> = {}
+      if (data.budget !== undefined && data.budget !== save.budget) {
+        financeMeta.budget = { from: save.budget, to: data.budget }
+      }
+      if (data.balance !== undefined && data.balance !== save.balance) {
+        financeMeta.balance = { from: save.balance, to: data.balance }
+      }
+      if (Object.keys(financeMeta).length > 0) {
+        await writeAudit(tx, { userId, saveId, action: 'save.finance_edit', meta: financeMeta })
+      }
+    }
   })
 
   if (seasonChanged) {
@@ -336,12 +364,80 @@ export async function updateSave(
   }
 }
 
-export async function deleteSave(saveId: string, userId: string) {
+/**
+ * Lista os saves arquivados (soft-deleted) do usuário, para a "lixeira"/recuperação.
+ */
+export async function listDeletedSaves(userId: string) {
+  const saves = await prisma.save.findMany({
+    where: { userId, deletedAt: { not: null } },
+    orderBy: { deletedAt: 'desc' },
+  })
+  return saves.map((s) => ({
+    ...s,
+    budgetFormatted: formatBalance(s.budget),
+    balanceFormatted: formatBalance(s.balance),
+  }))
+}
+
+/**
+ * Deleta um save. Por padrão é SOFT (marca `deletedAt`, reversível) e tira um snapshot
+ * `pre-delete`. Com `purge: true` apaga de vez (cascade + snapshots) — terminal.
+ * Exige `confirm === saveId` em ambos os casos para evitar chamada acidental.
+ */
+export async function deleteSave(
+  saveId: string,
+  userId: string,
+  opts: { confirm?: string; purge?: boolean } = {}
+) {
   const save = await prisma.save.findUnique({ where: { id: saveId } })
   if (!save) throw new NotFoundError('Save não encontrado.')
   if (save.userId !== userId) throw new NotFoundError('Save não encontrado.')
 
-  await prisma.save.delete({ where: { id: saveId } })
+  if (opts.confirm !== saveId) {
+    throw new AppError(
+      'Confirmação necessária: envie ?confirm=<saveId> para deletar.',
+      400,
+      'DELETE_CONFIRMATION_REQUIRED'
+    )
+  }
+
+  if (opts.purge) {
+    await prisma.$transaction(async (tx) => {
+      // Audita ANTES (o AuditLog não tem FK ao save, então sobrevive ao purge).
+      await writeAudit(tx, { userId, saveId, action: 'save.purge', meta: { name: save.name } })
+      await tx.save.delete({ where: { id: saveId } })
+    })
+    await cacheInvalidatePattern(`save:${saveId}:*`)
+    await cacheInvalidate(`save:${saveId}`, `user:${userId}:saves`)
+    return { purged: true as const }
+  }
+
+  // Soft-delete: snapshot de segurança + marca deletedAt, tudo atômico.
+  if (save.deletedAt) return { purged: false as const, deletedAt: save.deletedAt }
+  await prisma.$transaction(async (tx) => {
+    await createSnapshot(tx, saveId, userId, 'pre-delete')
+    await writeAudit(tx, { userId, saveId, action: 'save.soft_delete', meta: { name: save.name } })
+    await tx.save.update({ where: { id: saveId }, data: { deletedAt: new Date() } })
+  })
   await cacheInvalidatePattern(`save:${saveId}:*`)
+  await cacheInvalidate(`save:${saveId}`, `user:${userId}:saves`)
+  return { purged: false as const }
+}
+
+/**
+ * Des-arquiva um save soft-deleted (limpa `deletedAt`). Recuperação simples do caso
+ * "deletei sem querer" — os dados não foram alterados pelo soft-delete. Para reverter um
+ * avanço de temporada use o restore por snapshot.
+ */
+export async function restoreSave(saveId: string, userId: string) {
+  const save = await prisma.save.findUnique({ where: { id: saveId } })
+  if (!save) throw new NotFoundError('Save não encontrado.')
+  if (save.userId !== userId) throw new NotFoundError('Save não encontrado.')
+  if (!save.deletedAt) throw new AppError('Save não está arquivado.', 400)
+
+  await prisma.$transaction(async (tx) => {
+    await tx.save.update({ where: { id: saveId }, data: { deletedAt: null } })
+    await writeAudit(tx, { userId, saveId, action: 'save.restore' })
+  })
   await cacheInvalidate(`save:${saveId}`, `user:${userId}:saves`)
 }
