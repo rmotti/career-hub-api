@@ -4,6 +4,7 @@ import {
   getFc26PlayerHandler,
   getFc26FiltersHandler,
 } from './fc26-players.controller.js'
+import { rateLimit } from '../../shared/utils/rate-limit.js'
 
 const nullableInt = { type: 'integer', nullable: true }
 const nullableNum = { type: 'number', nullable: true }
@@ -97,6 +98,9 @@ const fc26PlayerSchema = {
 }
 
 export async function fc26PlayersRoutes(app: FastifyInstance) {
+  // Dataset + fit-score por jogador é caro: limita por usuário (além do limiter global do Better Auth).
+  app.addHook('preHandler', rateLimit({ bucket: 'fc26-players', max: 30 }))
+
   app.get('/fc26-players/filters', {
     schema: {
       tags: ['FC26 Players'],
