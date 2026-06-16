@@ -273,7 +273,7 @@ export async function updateTransfer(
   })
 
   await cacheInvalidate(`save:${saveId}:transfers`, `save:${saveId}:transfers:current`)
-  return updated
+  return formatTransferResponse(updated)
 }
 
 export async function deleteTransfer(saveId: string, tid: string) {

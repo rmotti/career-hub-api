@@ -67,7 +67,17 @@ export async function createTrophy(
 
   await cacheInvalidate(`save:${saveId}:trophies`)
 
-  return result
+  // Mesma forma que listTrophies — contrato único entre criação e listagem.
+  return {
+    id: result.id,
+    year: result.year,
+    createdAt: result.createdAt,
+    clubStintId: result.clubStintId,
+    club: currentStint.club,
+    competition: result.competition
+      ? { id: result.competition.id, name: result.competition.name, type: result.competition.type }
+      : null,
+  }
 }
 
 export async function deleteTrophy(saveId: string, id: string) {

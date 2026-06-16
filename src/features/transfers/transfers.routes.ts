@@ -3,6 +3,91 @@ import { TransferType } from '@prisma/client'
 import * as transfersController from './transfers.controller.js'
 import { requireSaveOwnership } from '../../shared/utils/save-access.js'
 
+const nullableNum = { type: 'number', nullable: true }
+const nullableStr = { type: 'string', nullable: true }
+
+const errorResponse = {
+  type: 'object',
+  properties: {
+    error: { type: 'string' },
+    message: { type: 'string' },
+    statusCode: { type: 'integer' },
+  },
+}
+
+// Campos escalares do Transfer + feeFormatted (de formatTransferResponse).
+const transferScalarProperties = {
+  id: { type: 'string' },
+  saveId: { type: 'string' },
+  playerId: nullableStr,
+  playerName: { type: 'string' },
+  type: { type: 'string' },
+  from: { type: 'string' },
+  to: { type: 'string' },
+  fee: nullableNum,
+  season: { type: 'string' },
+  createdAt: { type: 'string', format: 'date-time' },
+  feeFormatted: { type: 'string' },
+}
+
+// A listagem embute um resumo do player; as mutações trazem clubStintId.
+const transferListItemResponse = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    ...transferScalarProperties,
+    player: {
+      type: 'object',
+      nullable: true,
+      additionalProperties: false,
+      properties: {
+        id: { type: 'string' },
+        name: { type: 'string' },
+        position: { type: 'string' },
+        alternativePosition: {
+          type: 'object',
+          properties: { positions: { type: 'array', items: { type: 'string' } } },
+        },
+      },
+    },
+  },
+}
+
+const transferMutationResponse = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    ...transferScalarProperties,
+    clubStintId: nullableStr,
+  },
+}
+
+// Resumo do save retornado por formatSaveResponse em createTransfer.
+const saveSummaryResponse = {
+  type: 'object',
+  nullable: true,
+  additionalProperties: false,
+  properties: {
+    id: { type: 'string' },
+    currentSeason: { type: 'string' },
+    currentYear: { type: 'integer' },
+    balance: nullableNum,
+    balanceFormatted: { type: 'string' },
+    budget: nullableNum,
+    budgetFormatted: { type: 'string' },
+  },
+}
+
+const createTransferResponse = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    transfer: transferMutationResponse,
+    playerId: nullableStr,
+    save: saveSummaryResponse,
+  },
+}
+
 export async function transfersRoutes(app: FastifyInstance) {
   app.addHook('preHandler', requireSaveOwnership())
 
@@ -25,6 +110,10 @@ export async function transfersRoutes(app: FastifyInstance) {
         properties: {
           season: { type: 'string', enum: ['current'], description: 'Use "current" para filtrar pela temporada atual' },
         },
+      },
+      response: {
+        200: { type: 'array', items: transferListItemResponse },
+        404: errorResponse,
       },
     },
   }, transfersController.listTransfers)
@@ -68,6 +157,11 @@ Toda a operação é feita em transação Prisma.`,
             playerId: { type: 'string', description: 'UUID do player já existente no save (opcional)' },
           },
         },
+        response: {
+          201: createTransferResponse,
+          400: errorResponse,
+          404: errorResponse,
+        },
       },
     },
     transfersController.createTransfer
@@ -107,6 +201,11 @@ Toda a operação é feita em transação Prisma.`,
             season: { type: 'string', pattern: '^\\d{4}\\/\\d{2}$' },
           },
         },
+        response: {
+          200: transferMutationResponse,
+          400: errorResponse,
+          404: errorResponse,
+        },
       },
     },
     transfersController.updateTransfer
@@ -126,6 +225,10 @@ Toda a operação é feita em transação Prisma.`,
             tid: { type: 'string' },
           },
         },
+        response: {
+          204: { type: 'null' },
+          404: errorResponse,
+        },
       },
     },
     transfersController.deleteTransfer
@@ -144,6 +247,14 @@ Toda a operação é feita em transação Prisma.`,
             saveId: { type: 'string' },
             tid: { type: 'string' },
           },
+        },
+        response: {
+          200: {
+            type: 'object',
+            additionalProperties: false,
+            properties: { reversed: { type: 'boolean' } },
+          },
+          404: errorResponse,
         },
       },
     },

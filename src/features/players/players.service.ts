@@ -671,7 +671,7 @@ export async function releasePlayer(saveId: string, playerId: string, userId: st
 
   await invalidatePlayersCache(saveId)
 
-  return result
+  return formatPlayer(result)
 }
 
 /**

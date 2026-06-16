@@ -19,6 +19,149 @@ const alternativePositionSchema = {
   },
 }
 
+const nullableInt = { type: 'integer', nullable: true }
+const nullableNum = { type: 'number', nullable: true }
+const nullableStr = { type: 'string', nullable: true }
+
+const errorResponse = {
+  type: 'object',
+  properties: {
+    error: { type: 'string' },
+    message: { type: 'string' },
+    statusCode: { type: 'integer' },
+  },
+}
+
+const alternativePositionResponse = {
+  type: 'object',
+  properties: { positions: { type: 'array', items: { type: 'string' } } },
+}
+
+// Campos do Player + os derivados de formatPlayer (marketValueFormatted/salaryFormatted).
+const playerProperties = {
+  id: { type: 'string' },
+  saveId: { type: 'string' },
+  activeClubStintId: nullableStr,
+  name: { type: 'string' },
+  position: { type: 'string' },
+  age: { type: 'integer' },
+  status: { type: 'string' },
+  ovr: { type: 'integer' },
+  potential: nullableInt,
+  shirtNumber: nullableInt,
+  nation: nullableStr,
+  salary: nullableNum,
+  marketValue: nullableNum,
+  alternativePosition: alternativePositionResponse,
+  createdAt: { type: 'string', format: 'date-time' },
+  updatedAt: { type: 'string', format: 'date-time' },
+  marketValueFormatted: { type: 'string' },
+  salaryFormatted: { type: 'string' },
+}
+
+const playerResponse = {
+  type: 'object',
+  additionalProperties: false,
+  properties: playerProperties,
+}
+
+const seasonStatsProperties = {
+  goals: { type: 'integer' },
+  assists: { type: 'integer' },
+  matches: { type: 'integer' },
+  yellowCards: { type: 'integer' },
+  redCards: { type: 'integer' },
+  cleanSheets: { type: 'integer' },
+  goalContributions: { type: 'integer' },
+}
+
+// currentSeasonStats é a linha completa de PlayerSeasonStats (+ goalContributions)
+// ou, sem stats na temporada, o fallback zerado (só os contadores).
+const currentSeasonStatsResponse = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    id: { type: 'string' },
+    playerId: { type: 'string' },
+    clubStintId: { type: 'string' },
+    season: { type: 'string' },
+    createdAt: { type: 'string', format: 'date-time' },
+    updatedAt: { type: 'string', format: 'date-time' },
+    ...seasonStatsProperties,
+  },
+}
+
+// Item da listagem: Player + um dos conjuntos de stats derivados. Todos opcionais
+// porque a forma varia por query (?active / ?loaned / default) — fast-json-stringify
+// serializa só as chaves presentes em cada variante.
+const playerListItemResponse = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    ...playerProperties,
+    totalStats: { type: 'object', additionalProperties: false, properties: seasonStatsProperties },
+    currentSeasonStats: currentSeasonStatsResponse,
+    ovrDelta: nullableInt,
+    marketValueDelta: nullableNum,
+    loanedTo: nullableStr,
+    loanSeason: nullableStr,
+  },
+}
+
+const playerDetailResponse = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    ...playerProperties,
+    totalStats: { type: 'object', additionalProperties: false, properties: seasonStatsProperties },
+    history: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          club: { type: 'string' },
+          season: { type: 'string' },
+          ...seasonStatsProperties,
+        },
+      },
+    },
+    ovrHistory: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          season: { type: 'string' },
+          ovr: { type: 'integer' },
+          marketValue: nullableNum,
+        },
+      },
+    },
+  },
+}
+
+const playerStatsResponse = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    id: { type: 'string' },
+    playerId: { type: 'string' },
+    season: { type: 'string' },
+    ...seasonStatsProperties,
+  },
+}
+
+const importResponse = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    imported: { type: 'integer' },
+    skipped: { type: 'integer' },
+    total: { type: 'integer' },
+  },
+}
+
 export async function playersRoutes(app: FastifyInstance) {
   app.addHook('preHandler', requireSaveOwnership())
 
@@ -44,6 +187,10 @@ export async function playersRoutes(app: FastifyInstance) {
           loaned: { type: 'string', enum: ['true'], description: 'Listar jogadores emprestados pelo clube atual' },
         },
       },
+      response: {
+        200: { type: 'array', items: playerListItemResponse },
+        404: errorResponse,
+      },
     },
   }, playersController.listPlayers)
 
@@ -60,6 +207,10 @@ export async function playersRoutes(app: FastifyInstance) {
             saveId: { type: 'string' },
             playerId: { type: 'string' },
           },
+        },
+        response: {
+          200: playerDetailResponse,
+          404: errorResponse,
         },
       },
     },
@@ -110,6 +261,12 @@ export async function playersRoutes(app: FastifyInstance) {
             matches: { type: 'integer', minimum: 0, example: 23 },
           },
         },
+        response: {
+          201: playerResponse,
+          400: errorResponse,
+          404: errorResponse,
+          409: errorResponse,
+        },
       },
     },
     playersController.createPlayer
@@ -158,6 +315,12 @@ export async function playersRoutes(app: FastifyInstance) {
             matches: { type: 'integer', minimum: 0 },
           },
         },
+        response: {
+          200: playerResponse,
+          400: errorResponse,
+          404: errorResponse,
+          409: errorResponse,
+        },
       },
     },
     playersController.updatePlayer
@@ -192,6 +355,11 @@ export async function playersRoutes(app: FastifyInstance) {
             cleanSheets: { type: 'integer', minimum: 0, example: 12 },
           },
         },
+        response: {
+          200: playerStatsResponse,
+          400: errorResponse,
+          404: errorResponse,
+        },
       },
     },
     playersController.updatePlayerStats
@@ -209,6 +377,11 @@ export async function playersRoutes(app: FastifyInstance) {
           properties: {
             saveId: { type: 'string' },
           },
+        },
+        response: {
+          201: importResponse,
+          400: errorResponse,
+          404: errorResponse,
         },
       },
     },
@@ -228,6 +401,10 @@ export async function playersRoutes(app: FastifyInstance) {
             saveId: { type: 'string' },
             playerId: { type: 'string' },
           },
+        },
+        response: {
+          200: playerResponse,
+          404: errorResponse,
         },
       },
     },
