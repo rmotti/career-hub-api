@@ -141,6 +141,20 @@ export function registerScoutingTools(server: McpServer, ctx: McpContext) {
         `- Melhor OVR atual: ${r.fitAnalysis.bestSquadOvr ?? '—'}`,
         `- Idade média atual: ${r.fitAnalysis.avgSquadAge?.toFixed(1) ?? '—'}`,
         `- ${r.fitAnalysis.note}`,
+        ...(r.alternatives.length
+          ? [
+              ``,
+              `## Alternativas na posição (dentro do orçamento)`,
+              `| Nome | OVR/POT | Idade | Valor | Clube | sofifaId |`,
+              `|---|---|---|---|---|---|`,
+              ...r.alternatives.map(
+                (a) =>
+                  `| ${a.name} | ${a.ovr}/${a.potential} | ${a.age} | ${formatBalance(a.marketValue)} | ${
+                    a.club ?? '—'
+                  } | ${a.sofifaId} |`,
+              ),
+            ]
+          : []),
       ]
         .filter(Boolean)
         .join('\n')

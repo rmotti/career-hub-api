@@ -1,4 +1,4 @@
-import type { Position } from '@prisma/client'
+import type { Position, Prisma } from '@prisma/client'
 import { prisma } from '../../shared/lib/prisma.js'
 import { AppError, NotFoundError } from '../../shared/utils/errors.js'
 import { listFc26Players } from '../fc26-players/fc26-players.service.js'
@@ -132,7 +132,60 @@ export type SigningEvaluation = {
     ageDelta: number | null
     note: string
   }
-  alternatives: never[]
+  alternatives: SigningAlternative[]
+}
+
+export type SigningAlternative = {
+  sofifaId: number
+  name: string
+  position: string
+  ovr: number
+  potential: number
+  age: number
+  marketValue: number | null
+  club: string | null
+}
+
+const ALTERNATIVES_LIMIT = 5
+
+/**
+ * Same-(primary-)position dataset players the club could sign instead, ranked by overall.
+ * "Near the budget": capped at the budget when known, otherwise at the target's own market
+ * value (so we never suggest a costlier player). The target itself is excluded. Pure dataset
+ * query — no fit-score call, keeping this off the rate-limited/expensive path.
+ */
+async function findAlternatives(
+  excludeSofifaId: number,
+  position: Position,
+  budget: number | null,
+  targetValue: number | null,
+): Promise<SigningAlternative[]> {
+  const cap = budget ?? targetValue
+  const where: Prisma.Fc26PlayerWhereInput = {
+    sofifaId: { not: excludeSofifaId },
+    positions: { has: position },
+  }
+  if (cap !== null) where.marketValue = { not: null, lte: cap }
+
+  const rows = await prisma.fc26Player.findMany({
+    where,
+    orderBy: { ovr: 'desc' },
+    take: ALTERNATIVES_LIMIT * 4, // over-fetch: filtered down to same PRIMARY position below
+  })
+
+  return rows
+    .filter((p) => p.positions[0] === position)
+    .slice(0, ALTERNATIVES_LIMIT)
+    .map((p) => ({
+      sofifaId: p.sofifaId,
+      name: p.name,
+      position: p.positions.join('/'),
+      ovr: p.ovr,
+      potential: p.potential,
+      age: p.age,
+      marketValue: p.marketValue,
+      club: p.club,
+    }))
 }
 
 export async function evaluateSigningFit(
@@ -183,6 +236,10 @@ export async function evaluateSigningFit(
         : `Reforço lateral: delta de overall ${ovrDelta >= 0 ? '+' : ''}${ovrDelta}.`
   }
 
+  const alternatives = primaryPos
+    ? await findAlternatives(sofifaId, primaryPos, budget, marketValue)
+    : []
+
   return {
     verdict,
     player: {
@@ -196,6 +253,6 @@ export async function evaluateSigningFit(
     },
     costAnalysis: { marketValue, budget, affordable, pctOfBudget },
     fitAnalysis: { samePositionCount: squad.length, bestSquadOvr, avgSquadAge, ovrDelta, ageDelta, note },
-    alternatives: [],
+    alternatives,
   }
 }
