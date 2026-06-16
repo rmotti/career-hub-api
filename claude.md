@@ -38,6 +38,8 @@ Feature-based structure: each domain lives in `src/features/<name>/` with three 
 
 **Prisma** (`src/shared/lib/prisma.ts`): singleton with `connection_limit=20&pool_timeout=20` appended to `DATABASE_URL`. The `directUrl` env var is the direct Neon connection used only for migrations (bypasses PgBouncer).
 
+**Stateless-process invariant (required for horizontal scaling):** no request-affecting mutable state may live in process memory — **all** shared state belongs in Redis or Postgres. This is what makes scaling `numReplicas` past 1 safe; `railway.json` runs a single replica today, but the code must stay multi-replica-safe so adding replicas needs no code change. Concretely: caches go through `shared/utils/cache.ts` (Redis), and rate-limit counters through `shared/utils/rate-limit.ts` (Redis fixed-window) — never a module-level `Map`/object/counter. The only permitted in-process data is **immutable, deploy-time-constant** values that are identical in every replica: the hardcoded club list and `LEAGUE_TO_COUNTRY` map in `clubs.service.ts`, the generated club aliases, and config read from env at boot. If you reach for a `let`/mutable singleton that varies per request or accumulates state, that's the regression this invariant exists to catch — put it in Redis instead.
+
 ## Domain model
 
 `Save` = one FC 26 career. `ClubStint` = a spell at one club within a save (`isCurrent: true` = active club). `Player` has `activeClubStintId` pointing to the current stint (null = released/loaned out). `PlayerSeasonStats` and `TeamSeasonStats` are created per season when `PATCH /saves/:id` advances `currentSeason`.
@@ -51,6 +53,7 @@ Clubs are **in-memory** in `clubs.service.ts` (no DB table). Competitions are in
 - Fastify route schemas define request validation (body, params, querystring) inline in `routes.ts`. Response schemas are not yet defined — adding them enables fast-json-stringify serialization.
 - `AppError(message, statusCode)` for expected errors; `NotFoundError` is a subclass. The global error handler in `app.ts` also catches `PrismaClientKnownRequestError` codes P2025, P2003, P2002.
 - `DISABLE_RATE_LIMIT=true` env var disables Better Auth's rate limiter — set this on Railway when running load tests, never in production traffic.
+- **Review checklist — no per-process state:** before approving a change, reject any new mutable in-process state (module-level `Map`/`Set`/array/object/counter, mutable singleton, in-memory cache or rate-limit counter). It would silently break under multiple replicas. Route it through Redis (`cache.ts` / `rate-limit.ts`) instead. See the stateless-process invariant under [Architecture](#architecture).
 
 ## Load testing
 
