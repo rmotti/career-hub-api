@@ -21,6 +21,7 @@ import { shortlistRoutes } from './features/shortlist/shortlist.routes.js'
 import { savedSearchesRoutes } from './features/saved-searches/saved-searches.routes.js'
 import { scoutingRoutes } from './features/scouting/scouting.routes.js'
 import { chatRoutes } from './features/chat/chat.routes.js'
+import { healthRoutes } from './features/health/health.routes.js'
 import { mcpPlugin } from './mcp/plugin.js'
 import { getTrustedOrigins, isCredentialedOriginAllowed } from './shared/utils/origins.js'
 
@@ -42,8 +43,8 @@ export const app = Fastify({
 const trustedOrigins = getTrustedOrigins()
 
 app.register(cors, {
-  // Fluxo credenciado (cookie httpOnly): origin EXATO, nunca "*" (proibido com credentials)
-  // e sem wildcard (ver isCredentialedOriginAllowed).
+  // Credentialed flow (httpOnly cookie): EXACT origin, never "*" (forbidden with credentials)
+  // and no wildcard (see isCredentialedOriginAllowed).
   origin: process.env.NODE_ENV === 'production'
     ? (origin, callback) => {
         callback(null, isCredentialedOriginAllowed(origin, trustedOrigins))
@@ -51,12 +52,12 @@ app.register(cors, {
     : true,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  // Authorization (Bearer legado) + X-CSRF-Token (double-submit do fluxo por cookie).
+  // Authorization (legacy Bearer) + X-CSRF-Token (double-submit of the cookie flow).
   allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token'],
-  // Permite o SPA ler o token CSRF da resposta (além do corpo do login).
-  // `set-auth-token` NÃO é exposto: o cutover para cookie httpOnly está concluído e o SPA
-  // não consome esse header — expô-lo só deixaria o token de sessão alcançável por XSS.
-  // Clientes não-browser (MCP/mobile) continuam usando Authorization: Bearer (bearer plugin).
+  // Lets the SPA read the CSRF token from the response (besides the login body).
+  // `set-auth-token` is NOT exposed: the cutover to the httpOnly cookie is done and the SPA
+  // doesn't consume that header — exposing it would only leave the session token reachable by XSS.
+  // Non-browser clients (MCP/mobile) keep using Authorization: Bearer (bearer plugin).
   exposedHeaders: ['X-CSRF-Token'],
   maxAge: 86400,
 })
@@ -129,18 +130,21 @@ app.get('/', { schema: { hide: true } }, (_request, reply) => {
   reply.redirect('/docs')
 })
 
-// Rotas públicas de autenticação
+// Health checks — public (monitoring doesn't authenticate)
+app.register(healthRoutes, { prefix: '/api' })
+
+// Public authentication routes
 app.register(authRoutes, { prefix: '/api' })
 
-// MCP — auth é resolvida internamente pelo plugin (Bearer token)
+// MCP — auth is resolved internally by the plugin (Bearer token)
 app.register(mcpPlugin)
 
-// Rotas protegidas — requerem sessão válida
+// Protected routes — require a valid session
 app.register(async (protectedRoutes) => {
-  // CSRF no onRequest (fase mais cedo): roda ANTES da validação de body e do auth, então uma
-  // escrita forjada por cookie é rejeitada com 403 antes de parsear/validar o corpo (senão um
-  // body inválido retornaria 400 e mascararia o 403). Só precisa de headers/cookies, não do body.
-  // (Requisições por Bearer e métodos seguros passam direto — ver csrfProtection.)
+  // CSRF on onRequest (earliest phase): runs BEFORE body validation and auth, so a
+  // cookie-forged write is rejected with 403 before parsing/validating the body (otherwise an
+  // invalid body would return 400 and mask the 403). It only needs headers/cookies, not the body.
+  // (Bearer requests and safe methods pass straight through — see csrfProtection.)
   protectedRoutes.addHook('onRequest', csrfProtection())
   protectedRoutes.addHook('preHandler', requireAuth())
 
@@ -153,7 +157,7 @@ app.register(async (protectedRoutes) => {
   protectedRoutes.register(trophiesRoutes, { prefix: '/api' })
   protectedRoutes.register(competitionsRoutes, { prefix: '/api' })
 
-  // Superfície PRO — exige plano PRO+ (admin sempre passa). Sem isto o paywall é só no frontend.
+  // PRO surface — requires a PRO+ plan (admin always passes). Without this the paywall is frontend-only.
   protectedRoutes.register(async (proRoutes) => {
     proRoutes.addHook('preHandler', requirePlan('PRO'))
 
