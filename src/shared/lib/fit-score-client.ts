@@ -1,4 +1,5 @@
 import { logger } from './logger.js'
+import { recordFitScoreOutcome } from './metrics.js'
 
 export interface FitScoreCandidate {
   candidate_id: string
@@ -45,6 +46,7 @@ function record(outcome: FitScoreOutcome, info: { durationMs: number; status?: n
   health.totalCalls += 1
   health.lastOutcome = outcome
   health.lastLatencyMs = info.durationMs
+  recordFitScoreOutcome(outcome)
 
   if (outcome === 'ok') {
     health.okCalls += 1

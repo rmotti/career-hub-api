@@ -1,5 +1,6 @@
 import { FastifyInstance } from 'fastify'
 import { getFitScoreHealth } from '../../shared/lib/fit-score-client.js'
+import { renderMetrics, METRICS_CONTENT_TYPE } from '../../shared/lib/metrics.js'
 
 const fitScoreHealthResponse = {
   type: 'object',
@@ -46,5 +47,15 @@ export async function healthRoutes(app: FastifyInstance) {
   }, async (_request, reply) => {
     const health = getFitScoreHealth()
     return reply.code(health.status === 'down' ? 503 : 200).send(health)
+  })
+
+  // Prometheus scrape endpoint. Optionally gated by METRICS_TOKEN (Bearer) — when the env is
+  // unset the endpoint is open, which is fine for an internal-network/single-replica scrape.
+  app.get('/metrics', { schema: { hide: true } }, async (request, reply) => {
+    const token = process.env.METRICS_TOKEN
+    if (token && request.headers.authorization !== `Bearer ${token}`) {
+      return reply.code(401).send({ error: 'Unauthorized', statusCode: 401 })
+    }
+    return reply.header('content-type', METRICS_CONTENT_TYPE).send(renderMetrics())
   })
 }

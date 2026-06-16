@@ -60,4 +60,31 @@ describe('health routes', () => {
     expect(res.json()).toMatchObject({ status: 'down', consecutiveFailures: 3 })
     await app.close()
   })
+
+  it('GET /api/metrics returns Prometheus text', async () => {
+    const app = await buildApp()
+    const res = await app.inject({ method: 'GET', url: '/api/metrics' })
+    expect(res.statusCode).toBe(200)
+    expect(res.headers['content-type']).toContain('text/plain')
+    expect(res.body).toContain('# TYPE cache_hits_total counter')
+    await app.close()
+  })
+
+  it('GET /api/metrics requires the Bearer token when METRICS_TOKEN is set', async () => {
+    process.env.METRICS_TOKEN = 'secret'
+    const app = await buildApp()
+
+    const unauthorized = await app.inject({ method: 'GET', url: '/api/metrics' })
+    expect(unauthorized.statusCode).toBe(401)
+
+    const authorized = await app.inject({
+      method: 'GET',
+      url: '/api/metrics',
+      headers: { authorization: 'Bearer secret' },
+    })
+    expect(authorized.statusCode).toBe(200)
+
+    delete process.env.METRICS_TOKEN
+    await app.close()
+  })
 })

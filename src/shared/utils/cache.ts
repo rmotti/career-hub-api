@@ -1,11 +1,17 @@
 import { redis } from '../lib/redis.js'
+import { recordCacheHit, recordCacheMiss } from '../lib/metrics.js'
 
 export async function cacheGet<T>(key: string): Promise<T | null> {
   try {
     const value = await redis.get(key)
-    if (!value) return null
+    if (!value) {
+      recordCacheMiss()
+      return null
+    }
+    recordCacheHit()
     return JSON.parse(value) as T
   } catch {
+    recordCacheMiss()
     return null
   }
 }

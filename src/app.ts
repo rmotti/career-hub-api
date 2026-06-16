@@ -24,6 +24,7 @@ import { chatRoutes } from './features/chat/chat.routes.js'
 import { healthRoutes } from './features/health/health.routes.js'
 import { mcpPlugin } from './mcp/plugin.js'
 import { getTrustedOrigins, isCredentialedOriginAllowed } from './shared/utils/origins.js'
+import { httpRequestStarted, httpRequestFinished, recordHttpRequest } from './shared/lib/metrics.js'
 
 export const app = Fastify({
   logger: {
@@ -79,6 +80,21 @@ app.addContentTypeParser('application/json', { parseAs: 'string' }, (_req, body,
   } catch (err) {
     done(err as Error)
   }
+})
+
+// Metrics: count in-flight on entry, record route/status/duration on completion. Uses the
+// route TEMPLATE (e.g. /api/saves/:saveId) — never the raw URL — to keep label cardinality bounded.
+app.addHook('onRequest', (_request, _reply, done) => {
+  httpRequestStarted()
+  done()
+})
+app.addHook('onResponse', (request, reply, done) => {
+  httpRequestFinished()
+  const route = request.routeOptions?.url ?? 'unmatched'
+  if (route !== '/api/metrics') {
+    recordHttpRequest(request.method, route, reply.statusCode, reply.elapsedTime)
+  }
+  done()
 })
 
 app.register(swagger, {
