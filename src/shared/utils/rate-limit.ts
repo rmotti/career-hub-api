@@ -8,8 +8,8 @@ export interface RateLimitResult {
 }
 
 /**
- * Counter de janela fixa por chave no Redis. Falha aberto (retorna `ok: true`)
- * quando o Redis está indisponível — nunca derruba o fluxo principal.
+ * Per-key fixed-window counter in Redis. Fails open (returns `ok: true`)
+ * when Redis is unavailable — never takes down the main flow.
  */
 export async function consumeRateLimit(
   key: string,
@@ -39,16 +39,16 @@ export interface RouteRateLimitOptions {
 }
 
 /**
- * preHandler factory: limita por `request.user.id` em um bucket nomeado.
- * Deve ser registrado num escopo que já rodou `requireAuth()` (user presente).
- * Responde 429 com header `Retry-After` quando excedido.
+ * preHandler factory: limits per `request.user.id` in a named bucket.
+ * Must be registered in a scope that already ran `requireAuth()` (user present).
+ * Responds 429 with a `Retry-After` header when exceeded.
  */
 export function rateLimit(options: RouteRateLimitOptions) {
   const { bucket, max, windowSeconds = 60 } = options
 
   return async function rateLimitPreHandler(request: FastifyRequest, reply: FastifyReply) {
     const userId = request.user?.id
-    if (!userId) return // sem usuário resolvido, deixa o requireAuth/handler decidir
+    if (!userId) return // no resolved user, let requireAuth/handler decide
 
     const rl = await consumeRateLimit(`ratelimit:${bucket}:${userId}`, max, windowSeconds)
     if (!rl.ok) {

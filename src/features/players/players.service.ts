@@ -75,7 +75,7 @@ async function fetchPlayers(saveId: string, activeOnly?: boolean, season?: strin
     const isCurrentSeason = !season || season === save.currentSeason
 
     if (isCurrentSeason) {
-      // Buscar players ativos e season stats em paralelo — ambos precisam apenas de currentStint.id
+      // Fetch active players and season stats in parallel — both only need currentStint.id
       const [activePlayers, seasonStatsRows] = await Promise.all([
         prisma.player.findMany({
           where: { saveId, activeClubStintId: currentStint.id },
@@ -91,7 +91,7 @@ async function fetchPlayers(saveId: string, activeOnly?: boolean, season?: strin
         orderBy: { createdAt: 'desc' },
       })
 
-      // Última entrada de OVR por jogador (já ordenado por createdAt desc)
+      // Latest OVR entry per player (already ordered by createdAt desc)
       const lastOvrMap = new Map<string, typeof ovrHistoryRows[number]>()
       for (const h of ovrHistoryRows) {
         if (!lastOvrMap.has(h.playerId)) lastOvrMap.set(h.playerId, h)
@@ -543,10 +543,10 @@ export async function updatePlayerStats(
     throw e
   }
 
-  // Caminho quente (edição de stats da temporada atual): invalidação por chaves
-  // exatas, sem SCAN. Só a temporada atual muda; `players` entra porque a lista
-  // cheia agrega os totais de todas as temporadas por jogador. Seasons históricas
-  // e `players:loaned` não são afetadas (o jogador está no elenco ativo).
+  // Hot path (editing current-season stats): exact-key invalidation, no SCAN.
+  // Only the current season changes; `players` is included because the full list
+  // aggregates each player's totals across all seasons. Historical seasons
+  // and `players:loaned` are unaffected (the player is in the active squad).
   await cacheInvalidate(
     `save:${saveId}:player:${playerId}`,
     `save:${saveId}:players`,
@@ -596,8 +596,8 @@ export async function importFc26Squad(saveId: string, userId: string) {
   }
 
   await prisma.$transaction(async (tx) => {
-    // Import em massa (cria dezenas de jogadores): snapshot de segurança + auditoria antes,
-    // para um "desfazer importação" via restore do snapshot.
+    // Bulk import (creates dozens of players): safety snapshot + audit before,
+    // for an "undo import" via the snapshot restore.
     await createSnapshot(tx, saveId, userId, 'pre-fc26-import')
     await writeAudit(tx, {
       userId,
@@ -653,8 +653,8 @@ export async function releasePlayer(saveId: string, playerId: string, userId: st
   const player = await prisma.player.findFirst({ where: { id: playerId, saveId } })
   if (!player) throw new NotFoundError('Jogador não encontrado neste save.')
 
-  // Liberar tira o jogador do elenco (destrutivo): snapshot de segurança + auditoria antes,
-  // para que dê pra reverter via o restore do save. `fromClubStintId` fica no audit p/ rastreio.
+  // Releasing removes the player from the squad (destructive): safety snapshot + audit before,
+  // so it can be reverted via the save restore. `fromClubStintId` stays in the audit for tracing.
   const result = await prisma.$transaction(async (tx) => {
     await createSnapshot(tx, saveId, userId, 'pre-player-release')
     await writeAudit(tx, {
@@ -675,13 +675,13 @@ export async function releasePlayer(saveId: string, playerId: string, userId: st
 }
 
 /**
- * Invalida TODAS as chaves de cache de jogadores de um save de uma vez:
- * `players`, `players:active`, `players:active:<season>` (qualquer temporada
- * histórica), `players:loaned` e `player:<id>`. Todas começam com o prefixo
- * `save:<id>:player`, então um único pattern cobre o conjunto inteiro — inclusive
- * as chaves por-temporada que não dá pra enumerar sem conhecer as seasons.
- * Exportada para os serviços que mexem no elenco (transfers, club-stints) usarem
- * a mesma fonte de verdade em vez de listar chaves à mão (e esquecer alguma).
+ * Invalidates ALL of a save's player cache keys at once:
+ * `players`, `players:active`, `players:active:<season>` (any historical
+ * season), `players:loaned` and `player:<id>`. They all start with the prefix
+ * `save:<id>:player`, so a single pattern covers the whole set — including
+ * the per-season keys that can't be enumerated without knowing the seasons.
+ * Exported so the squad-mutating services (transfers, club-stints) use
+ * the same source of truth instead of hand-listing keys (and forgetting one).
  */
 export async function invalidatePlayersCache(saveId: string) {
   await cacheInvalidatePattern(`save:${saveId}:player*`)

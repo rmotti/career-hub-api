@@ -1,7 +1,7 @@
-// Apenas origens EXATAS que controlamos. Nada de wildcards em `*.vercel.app`:
-// qualquer um pode criar um projeto Vercel cujo hostname casaria com o padrão,
-// virando uma origem confiável e credenciada (IDOR de origem). Previews legítimos
-// devem ser fixados via a env `TRUSTED_ORIGINS`.
+// Only EXACT origins we control. No wildcards on `*.vercel.app`:
+// anyone can create a Vercel project whose hostname would match the pattern,
+// becoming a trusted, credentialed origin (origin IDOR). Legitimate previews
+// must be pinned via the `TRUSTED_ORIGINS` env.
 export const defaultTrustedOrigins = [
   'https://fc-career-hub.vercel.app',
 ]
@@ -32,12 +32,12 @@ export function isTrustedOrigin(origin: string | undefined, trustedOrigins = get
 }
 
 /**
- * Matcher para o CORS COM credenciais (cookie httpOnly + `credentials: true`). Aqui wildcard
- * é proibido: um padrão como `https://fc-*.vercel.app` deixaria qualquer projeto Vercel que
- * casasse receber respostas credenciadas e ler/escrever o cookie de sessão. Exigimos origin
- * EXATO. Previews legítimos devem ser fixados como origins exatos em `TRUSTED_ORIGINS`.
- * `origin` ausente (same-origin / cliente não-browser) é permitido — o browser simplesmente
- * não recebe `Access-Control-Allow-Origin` nesse caso.
+ * Matcher for CORS WITH credentials (httpOnly cookie + `credentials: true`). Wildcards are
+ * forbidden here: a pattern like `https://fc-*.vercel.app` would let any matching Vercel project
+ * receive credentialed responses and read/write the session cookie. We require an EXACT
+ * origin. Legitimate previews must be pinned as exact origins in `TRUSTED_ORIGINS`.
+ * A missing `origin` (same-origin / non-browser client) is allowed — the browser simply
+ * doesn't receive `Access-Control-Allow-Origin` in that case.
  */
 export function isCredentialedOriginAllowed(origin: string | undefined, trustedOrigins = getTrustedOrigins()) {
   if (!origin) return true

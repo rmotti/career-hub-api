@@ -115,7 +115,7 @@ export async function createTransfer(
   const result = await prisma.$transaction(async (tx) => {
     let resolvedPlayerId: string | null = data.playerId ?? null
 
-    // ── ENTRADA (compra / emprestimo_entrada): resolve or create player ──
+    // ── INBOUND (compra / emprestimo_entrada): resolve or create player ──
     if (COMPRA_TYPES.includes(data.type)) {
       const existingPlayer = data.playerId
         ? await tx.player.findFirst({ where: { id: data.playerId, saveId } })
@@ -177,7 +177,7 @@ export async function createTransfer(
       },
     })
 
-    // ── SAÍDA (venda / emprestimo_saida): remove player from active squad ──
+    // ── OUTBOUND (venda / emprestimo_saida): remove player from active squad ──
     if (VENDA_TYPES.includes(data.type) && resolvedPlayerId) {
       await tx.player.update({
         where: { id: resolvedPlayerId },
@@ -188,12 +188,12 @@ export async function createTransfer(
       })
     }
 
-    // Update balance only for compra/venda (not for empréstimos)
-    // Usa o `save` já carregado fora da transação — evita query duplicada
+    // Update balance only for compra/venda (not for loans)
+    // Use the `save` already loaded outside the transaction — avoids a duplicate query
     const fee = data.fee ?? 0
     const balanceAffects = data.type === TransferType.compra || data.type === TransferType.venda
 
-    // Tipar apenas os campos usados por formatSaveResponse
+    // Type only the fields used by formatSaveResponse
     let updatedSave: { id: string; balance: number | null; budget: number | null; currentSeason: string; currentYear: number } = save
     if (fee > 0 && balanceAffects) {
       const currentBalance = save.balance ?? 0
@@ -211,8 +211,8 @@ export async function createTransfer(
   })
 
   await cacheInvalidate(`save:${saveId}:transfers`, `save:${saveId}:transfers:current`)
-  // Saídas (venda/empréstimo) tiram o jogador do elenco e mudam seu status —
-  // invalida todas as chaves de players (active, loaned, seasons e o detalhe).
+  // Outbound moves (sale/loan) remove the player from the squad and change their status —
+  // invalidate every player key (active, loaned, seasons and the detail).
   await invalidatePlayersCache(saveId)
 
   return {
@@ -285,10 +285,10 @@ export async function deleteTransfer(saveId: string, tid: string) {
 }
 
 /**
- * Reverte uma transferência DESFAZENDO seus efeitos colaterais (o `deleteTransfer` apenas
- * apaga a linha e deixa saldo e elenco inconsistentes). Reverte o saldo, recoloca/retira o
- * jogador do elenco conforme o tipo e remove o registro. Tira um snapshot de segurança e
- * audita a ação. Resolve o caso "vendi o jogador errado": dinheiro e jogador voltam.
+ * Reverts a transfer by UNDOING its side effects (`deleteTransfer` only
+ * deleted the row and left balance and squad inconsistent). Reverts the balance, re-adds/removes the
+ * player from the squad per type, and deletes the record. Takes a safety snapshot and
+ * audits the action. Solves the "I sold the wrong player" case: money and player come back.
  */
 export async function reverseTransfer(saveId: string, tid: string, userId: string) {
   const transfer = await prisma.transfer.findFirst({ where: { id: tid, saveId } })
@@ -302,7 +302,7 @@ export async function reverseTransfer(saveId: string, tid: string, userId: strin
   const fallbackStintId = save.clubStints[0]?.id ?? null
 
   await prisma.$transaction(async (tx) => {
-    // Rede de segurança: snapshot completo + auditoria antes de reverter.
+    // Safety net: full snapshot + audit before reverting.
     await createSnapshot(tx, saveId, userId, 'pre-transfer-reverse')
     await writeAudit(tx, {
       userId,
@@ -311,7 +311,7 @@ export async function reverseTransfer(saveId: string, tid: string, userId: strin
       meta: { transferId: tid, type: transfer.type, playerName: transfer.playerName, fee: transfer.fee ?? null },
     })
 
-    // 1) Reverte o efeito no saldo (só compra/venda mexem em dinheiro).
+    // 1) Revert the balance effect (only compra/venda touch money).
     const fee = transfer.fee ?? 0
     if (fee > 0) {
       const balance = save.balance ?? 0
@@ -322,16 +322,16 @@ export async function reverseTransfer(saveId: string, tid: string, userId: strin
       }
     }
 
-    // 2) Reverte o estado do jogador no elenco.
+    // 2) Revert the player's squad state.
     if (transfer.playerId) {
       if (VENDA_TYPES.includes(transfer.type)) {
-        // Saída revertida → jogador volta ao elenco (no stint de onde saiu).
+        // Outbound reverted → player returns to the squad (in the stint they left from).
         await tx.player.update({
           where: { id: transfer.playerId },
           data: { activeClubStintId: transfer.clubStintId ?? fallbackStintId, status: PlayerStatus.Role },
         })
       } else if (COMPRA_TYPES.includes(transfer.type)) {
-        // Entrada revertida → jogador sai do elenco (vira inativo).
+        // Inbound reverted → player leaves the squad (becomes inactive).
         await tx.player.update({
           where: { id: transfer.playerId },
           data: { activeClubStintId: null },
@@ -339,12 +339,12 @@ export async function reverseTransfer(saveId: string, tid: string, userId: strin
       }
     }
 
-    // 3) Remove o registro da transferência.
+    // 3) Delete the transfer record.
     await tx.transfer.delete({ where: { id: tid } })
   })
 
   await cacheInvalidate(`save:${saveId}:transfers`, `save:${saveId}:transfers:current`)
-  // Reverter recoloca/retira o jogador do elenco — invalida todas as chaves de players.
+  // Reverting re-adds/removes the player from the squad — invalidate every player key.
   await invalidatePlayersCache(saveId)
 
   return { reversed: true as const }

@@ -67,7 +67,7 @@ export async function createTrophy(
 
   await cacheInvalidate(`save:${saveId}:trophies`)
 
-  // Mesma forma que listTrophies — contrato único entre criação e listagem.
+  // Same shape as listTrophies — a single contract between create and list.
   return {
     id: result.id,
     year: result.year,

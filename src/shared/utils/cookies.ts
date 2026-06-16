@@ -1,15 +1,15 @@
 import { randomBytes, timingSafeEqual } from 'node:crypto'
 import type { FastifyRequest } from 'fastify'
 
-// Nome do cookie httpOnly que carrega o token de sessão (mesmo valor do Bearer).
+// Name of the httpOnly cookie carrying the session token (same value as the Bearer).
 export const SESSION_COOKIE = 'session_token'
-// Nome do cookie NÃO-httpOnly do double-submit CSRF.
+// Name of the NON-httpOnly double-submit CSRF cookie.
 export const CSRF_COOKIE = 'csrf_token'
-// Header que o frontend deve ecoar nas requisições de escrita.
+// Header the frontend must echo back on write requests.
 export const CSRF_HEADER = 'x-csrf-token'
 
-// Better Auth não customiza `session.expiresIn` → default de 7 dias.
-// Mantemos o Max-Age dos cookies alinhado a essa janela.
+// Better Auth doesn't customize `session.expiresIn` → defaults to 7 days.
+// We keep the cookies' Max-Age aligned with that window.
 export const SESSION_MAX_AGE = 60 * 60 * 24 * 7 // 604800s
 
 const isProd = () => process.env.NODE_ENV === 'production'
@@ -44,10 +44,10 @@ interface CookieOptions {
 }
 
 /**
- * Serializa um cookie cross-site. Em produção exige `SameSite=None; Secure` (obrigatório
- * para domínios diferentes — frontend Vercel × API Railway) e `Partitioned` (CHIPS),
- * espelhando os `defaultCookieAttributes` que o Better Auth já usa. Em dev (localhost http)
- * cai para `SameSite=Lax` sem `Secure`, senão o browser recusa o cookie.
+ * Serializes a cross-site cookie. In production it requires `SameSite=None; Secure` (mandatory
+ * for different domains — Vercel frontend × Railway API) and `Partitioned` (CHIPS),
+ * mirroring the `defaultCookieAttributes` Better Auth already uses. In dev (localhost http)
+ * it falls back to `SameSite=Lax` without `Secure`, otherwise the browser rejects the cookie.
  */
 function serialize(name: string, value: string, options: CookieOptions): string {
   const segments = [

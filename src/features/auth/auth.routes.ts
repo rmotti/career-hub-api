@@ -31,10 +31,10 @@ function toBetterAuthRequest(request: {
 }
 
 /**
- * Copia status/headers do Response do Better Auth para o reply do Fastify, mas:
- * - trata `set-cookie` via `getSetCookie()` (o `forEach` junta múltiplos cookies numa string
- *   inválida) e permite anexar cookies extras nossos;
- * - omite `content-length`/`content-encoding` (o Fastify recalcula ao enviar o payload).
+ * Copies status/headers from the Better Auth Response onto the Fastify reply, but:
+ * - handles `set-cookie` via `getSetCookie()` (`forEach` joins multiple cookies into an
+ *   invalid string) and allows appending our own extra cookies;
+ * - omits `content-length`/`content-encoding` (Fastify recomputes them when sending the payload).
  */
 function forwardHeaders(response: Response, reply: FastifyReply, extraCookies: string[] = []) {
   const upstreamCookies =
@@ -51,11 +51,11 @@ function forwardHeaders(response: Response, reply: FastifyReply, extraCookies: s
 }
 
 /**
- * Handler comum de sign-in/sign-up: encaminha a resposta do Better Auth e, no sucesso,
- * emite o cookie httpOnly `session_token`, o cookie `csrf_token` e devolve o `csrfToken`
- * no corpo + header (o SPA não consegue ler cookies cross-site, então recebe o token CSRF
- * por aqui). O `token` é usado APENAS para setar o cookie e é então removido do corpo —
- * pós-cutover ele não vive mais em lugar acessível ao JS, fechando a brecha de XSS no login.
+ * Shared sign-in/sign-up handler: forwards the Better Auth response and, on success,
+ * issues the httpOnly `session_token` cookie, the `csrf_token` cookie and returns the `csrfToken`
+ * in the body + header (the SPA can't read cookies cross-site, so it receives the CSRF token
+ * here). The `token` is used ONLY to set the cookie and is then removed from the body —
+ * post-cutover it no longer lives anywhere accessible to JS, closing the login XSS hole.
  */
 async function handleSessionResponse(response: Response, reply: FastifyReply) {
   const text = await response.text()
@@ -66,7 +66,7 @@ async function handleSessionResponse(response: Response, reply: FastifyReply) {
       if (body && typeof body.token === 'string') {
         const csrfToken = generateCsrfToken()
         const sessionToken = body.token
-        delete body.token // não expõe o token ao JS — vive só no cookie httpOnly
+        delete body.token // don't expose the token to JS — it lives only in the httpOnly cookie
         body.csrfToken = csrfToken
 
         forwardHeaders(response, reply, [sessionCookie(sessionToken), csrfCookie(csrfToken)])
@@ -76,7 +76,7 @@ async function handleSessionResponse(response: Response, reply: FastifyReply) {
         return reply.send(JSON.stringify(body))
       }
     } catch {
-      // corpo não-JSON ou inesperado → encaminha sem alterar
+      // non-JSON or unexpected body → forward unchanged
     }
   }
 
@@ -212,10 +212,10 @@ export async function authRoutes(app: FastifyInstance) {
       },
     },
   }, async (request, reply) => {
-    // Resolve a sessão pelo MESMO caminho do requireAuth: extrai o token do cookie httpOnly
-    // `session_token` (ou Bearer legado) e injeta como Bearer no Better Auth. Encaminhar a
-    // requisição crua não funciona cross-site — o Better Auth não reconhece o nosso cookie,
-    // então o SPA caía no login a cada refresh.
+    // Resolve the session via the SAME path as requireAuth: extract the token from the httpOnly
+    // `session_token` cookie (or legacy Bearer) and inject it as Bearer into Better Auth. Forwarding
+    // the raw request doesn't work cross-site — Better Auth doesn't recognize our cookie,
+    // so the SPA was dropped back to login on every refresh.
     const session = await getSession(request)
     if (!session?.user) {
       return reply.status(401).send({ error: 'Não autenticado.', statusCode: 401 })
@@ -238,12 +238,12 @@ export async function authRoutes(app: FastifyInstance) {
       },
     },
   }, async (request, reply) => {
-    // Token pode vir do cookie (novo fluxo) ou do Bearer (legado) — invalida o cache certo.
+    // Token may come from the cookie (new flow) or Bearer (legacy) — invalidate the right cache.
     const token = extractSessionToken(request)
     const response = await auth.handler(toBetterAuthRequest(request as any))
     await invalidateSessionCache(token)
 
-    // Expira os cookies em qualquer caminho (inclusive no fallback de erro do Better Auth).
+    // Expire the cookies on every path (including Better Auth's error fallback).
     const clearedCookies = [clearedSessionCookie(), clearedCsrfCookie()]
     if (response.status >= 500) {
       reply.header('set-cookie', clearedCookies)
@@ -254,8 +254,8 @@ export async function authRoutes(app: FastifyInstance) {
     return reply.send(await response.text())
   })
 
-  // Reabastece o token CSRF. O SPA chama no boot (após reload perde o token da memória e
-  // não consegue ler o cookie cross-site). Devolve o token do cookie atual ou emite um novo.
+  // Refills the CSRF token. The SPA calls it on boot (after a reload it loses the in-memory token
+  // and can't read the cookie cross-site). Returns the current cookie's token or issues a new one.
   app.get('/auth/csrf', {
     schema: {
       tags: ['Auth'],
@@ -279,7 +279,7 @@ export async function authRoutes(app: FastifyInstance) {
     return reply.send({ csrfToken })
   })
 
-  // Catch-all oculto — rotas internas do Better Auth (reset de senha, etc.)
+  // Hidden catch-all — Better Auth's internal routes (password reset, etc.)
   app.route({
     method: ['GET', 'POST'],
     url: '/auth/*',

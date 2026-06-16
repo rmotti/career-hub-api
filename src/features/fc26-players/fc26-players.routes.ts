@@ -98,7 +98,7 @@ const fc26PlayerSchema = {
 }
 
 export async function fc26PlayersRoutes(app: FastifyInstance) {
-  // Dataset + fit-score por jogador é caro: limita por usuário (além do limiter global do Better Auth).
+  // Dataset + fit-score per player is expensive: limit per user (on top of Better Auth's global limiter).
   app.addHook('preHandler', rateLimit({ bucket: 'fc26-players', max: 30 }))
 
   app.get('/fc26-players/filters', {

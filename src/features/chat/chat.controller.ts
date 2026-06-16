@@ -20,8 +20,8 @@ export async function sendMessage(
   }
 
   const { message, previousResponseId } = request.body
-  // Token efêmero com escopo MCP em vez do token de sessão completo: o token que
-  // transita pela OpenAI só dá acesso read-only ao MCP daquele usuário, por ~10 min.
+  // Ephemeral MCP-scoped token instead of the full session token: the token that
+  // transits OpenAI only grants read-only MCP access for that user, for ~10 min.
   const mcpToken = await mintMcpToken(request.user!.id)
   const mcpBaseUrl = process.env.API_URL ?? `${request.protocol}://${request.hostname}`
 

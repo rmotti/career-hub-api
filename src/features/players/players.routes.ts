@@ -37,7 +37,7 @@ const alternativePositionResponse = {
   properties: { positions: { type: 'array', items: { type: 'string' } } },
 }
 
-// Campos do Player + os derivados de formatPlayer (marketValueFormatted/salaryFormatted).
+// Player fields + the ones derived by formatPlayer (marketValueFormatted/salaryFormatted).
 const playerProperties = {
   id: { type: 'string' },
   saveId: { type: 'string' },
@@ -75,8 +75,8 @@ const seasonStatsProperties = {
   goalContributions: { type: 'integer' },
 }
 
-// currentSeasonStats é a linha completa de PlayerSeasonStats (+ goalContributions)
-// ou, sem stats na temporada, o fallback zerado (só os contadores).
+// currentSeasonStats is the full PlayerSeasonStats row (+ goalContributions)
+// or, with no stats this season, the zeroed fallback (just the counters).
 const currentSeasonStatsResponse = {
   type: 'object',
   additionalProperties: false,
@@ -91,9 +91,9 @@ const currentSeasonStatsResponse = {
   },
 }
 
-// Item da listagem: Player + um dos conjuntos de stats derivados. Todos opcionais
-// porque a forma varia por query (?active / ?loaned / default) — fast-json-stringify
-// serializa só as chaves presentes em cada variante.
+// List item: Player + one of the derived stats sets. All optional
+// because the shape varies by query (?active / ?loaned / default) — fast-json-stringify
+// serializes only the keys present in each variant.
 const playerListItemResponse = {
   type: 'object',
   additionalProperties: false,

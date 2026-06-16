@@ -3,7 +3,7 @@ import * as controller from './scouting.controller.js'
 import { rateLimit } from '../../shared/utils/rate-limit.js'
 
 export async function scoutingRoutes(app: FastifyInstance) {
-  // Todo endpoint de scouting bate no fit-score service / dataset — limita por usuário.
+  // Every scouting endpoint hits the fit-score service / dataset — limit per user.
   app.addHook('preHandler', rateLimit({ bucket: 'scouting', max: 30 }))
 
   app.get('/scouting/saves/:saveId/gaps', {

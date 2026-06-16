@@ -5,7 +5,7 @@ import { cacheInvalidate, cacheInvalidatePattern } from '../../shared/utils/cach
 
 type Tx = Prisma.TransactionClient
 
-// Motivos canônicos de um snapshot. 'manual' é o save-point sob demanda do usuário.
+// Canonical reasons for a snapshot. 'manual' is the user's on-demand save-point.
 export type SnapshotReason =
   | 'pre-season-advance'
   | 'pre-delete'
@@ -15,7 +15,7 @@ export type SnapshotReason =
   | 'pre-fc26-import'
   | 'manual'
 
-// Ações auditáveis (mutações irreversíveis ou de recuperação).
+// Auditable actions (irreversible or recovery mutations).
 export type AuditAction =
   | 'save.season_advance'
   | 'save.soft_delete'
@@ -29,15 +29,15 @@ export type AuditAction =
   | 'clubstint.change'
   | 'squad.import'
 
-// Quantos snapshots automáticos manter por save (poda os mais antigos na criação).
+// How many automatic snapshots to keep per save (prunes the oldest on creation).
 const MAX_SNAPSHOTS_PER_SAVE = 10
 
 const SNAPSHOT_PAYLOAD_VERSION = 1
 
 /**
- * Lê todas as linhas filhas de um save como arrays planos (sem includes), prontas para
- * serem regravadas via `createMany` preservando os IDs. A ordem das chaves não importa
- * aqui — o restore reinsere na ordem correta de FK.
+ * Reads all of a save's child rows as flat arrays (no includes), ready to
+ * be re-written via `createMany` preserving the IDs. The key order doesn't matter
+ * here — the restore re-inserts in the correct FK order.
  */
 async function collectSavePayload(tx: Tx, saveId: string) {
   const save = await tx.save.findUnique({ where: { id: saveId } })
@@ -93,8 +93,8 @@ async function collectSavePayload(tx: Tx, saveId: string) {
 type SavePayload = Awaited<ReturnType<typeof collectSavePayload>>
 
 /**
- * Cria um snapshot do save dentro de uma transação. Usado tanto pelos gatilhos automáticos
- * (avanço de temporada, delete) quanto pelo save-point manual. Poda os snapshots excedentes.
+ * Creates a save snapshot within a transaction. Used both by the automatic triggers
+ * (season advance, delete) and by the manual save-point. Prunes the overflow snapshots.
  */
 export async function createSnapshot(
   tx: Tx,
@@ -107,7 +107,7 @@ export async function createSnapshot(
     data: { saveId, userId, reason, payload: payload as unknown as Prisma.InputJsonValue },
   })
 
-  // Mantém só os MAX mais recentes — apaga o excedente mais antigo.
+  // Keep only the MAX most recent — delete the oldest overflow.
   const stale = await tx.saveSnapshot.findMany({
     where: { saveId },
     orderBy: { createdAt: 'desc' },
@@ -172,9 +172,9 @@ export async function createManualSnapshot(saveId: string, userId: string) {
 }
 
 /**
- * Restaura o save ao estado de um snapshot: apaga as linhas filhas atuais, reinsere as do
- * payload (preservando IDs), redefine os escalares do save e limpa `deletedAt` (des-arquiva).
- * Tudo numa transação. Competições/Fc26Player são tabelas externas e não são tocadas.
+ * Restores the save to a snapshot's state: deletes the current child rows, re-inserts the
+ * payload's (preserving IDs), resets the save's scalars and clears `deletedAt` (un-archives).
+ * All in one transaction. Competitions/Fc26Player are external tables and are left untouched.
  */
 export async function restoreSnapshot(saveId: string, snapshotId: string, userId: string) {
   await assertOwnedSave(saveId, userId)
@@ -185,7 +185,7 @@ export async function restoreSnapshot(saveId: string, snapshotId: string, userId
   const payload = snapshot.payload as unknown as SavePayload
 
   await prisma.$transaction(async (tx) => {
-    // 1) Apaga filhos na ordem reversa de FK.
+    // 1) Delete children in reverse FK order.
     await tx.playerOvrHistory.deleteMany({ where: { player: { saveId } } })
     await tx.playerSeasonStats.deleteMany({ where: { clubStint: { saveId } } })
     await tx.trophy.deleteMany({ where: { clubStint: { saveId } } })
@@ -197,7 +197,7 @@ export async function restoreSnapshot(saveId: string, snapshotId: string, userId
     await tx.scoutPlaybook.deleteMany({ where: { saveId } })
     await tx.clubStint.deleteMany({ where: { saveId } })
 
-    // 2) Reinsere na ordem de FK (pais antes de filhos).
+    // 2) Re-insert in FK order (parents before children).
     const insert = async <T>(rows: T[], fn: (data: T[]) => Promise<unknown>) => {
       if (rows.length > 0) await fn(rows)
     }
@@ -212,7 +212,7 @@ export async function restoreSnapshot(saveId: string, snapshotId: string, userId
     await insert(payload.shortlistItems, (data) => tx.shortlistItem.createMany({ data: data as Prisma.ShortlistItemCreateManyInput[] }))
     await insert(payload.savedSearches, (data) => tx.savedSearch.createMany({ data: data as Prisma.SavedSearchCreateManyInput[] }))
 
-    // 3) Restaura escalares do save e des-arquiva.
+    // 3) Restore the save's scalars and un-archive.
     await tx.save.update({
       where: { id: saveId },
       data: {

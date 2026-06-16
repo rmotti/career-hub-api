@@ -3,9 +3,9 @@ import { prisma } from '../lib/prisma.js'
 import { AppError, NotFoundError } from './errors.js'
 
 /**
- * Confirma que o save existe E pertence ao usuário autenticado.
- * Lança NotFoundError (404) — não 403 — para não vazar a existência de saves alheios,
- * espelhando o comportamento do módulo `saves`.
+ * Confirms the save exists AND belongs to the authenticated user.
+ * Throws NotFoundError (404) — not 403 — to avoid leaking the existence of other users' saves,
+ * mirroring the `saves` module's behavior.
  */
 export async function assertSaveAccess(saveId: string, userId: string) {
   const save = await prisma.save.findFirst({
@@ -17,10 +17,10 @@ export async function assertSaveAccess(saveId: string, userId: string) {
 }
 
 /**
- * preHandler para rotas com `:saveId` no path. Garante object-level authorization
- * (impede IDOR/BOLA): só prossegue se o save pertencer a `request.user`.
+ * preHandler for routes with `:saveId` in the path. Enforces object-level authorization
+ * (prevents IDOR/BOLA): only proceeds if the save belongs to `request.user`.
  *
- * Deve rodar depois de `requireAuth()`, que popula `request.user`.
+ * Must run after `requireAuth()`, which populates `request.user`.
  */
 export function requireSaveOwnership() {
   return async function (request: FastifyRequest, _reply: FastifyReply) {

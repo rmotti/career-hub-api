@@ -1,7 +1,7 @@
 import { prisma } from '../../shared/lib/prisma.js'
 import { cacheGet, cacheSet } from '../../shared/utils/cache.js'
 
-const TTL = 60 * 60 * 24 // 24h — dados estáticos
+const TTL = 60 * 60 * 24 // 24h — static data
 
 export async function listCompetitions() {
   const key = 'competitions:all'

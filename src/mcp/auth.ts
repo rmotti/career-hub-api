@@ -6,13 +6,13 @@ import { AppError } from '../shared/utils/errors.js'
 import type { McpContext } from './context.js'
 
 const SESSION_TTL = 300
-const SCOPED_TTL = 600 // 10 min — cobre uma rodada de chat; bem menor que a sessão real
+const SCOPED_TTL = 600 // 10 min — covers one chat round; much shorter than the real session
 
 /**
- * Emite um token efêmero com escopo APENAS de MCP, vinculado a um usuário.
- * Usado no chat para o callback da OpenAI: assim o token de sessão completo (que dá
- * acesso total à conta) nunca sai da nossa infraestrutura. Este token não autentica
- * na API principal — só é reconhecido por `resolveMcpContext`.
+ * Issues an ephemeral, MCP-ONLY-scoped token bound to a user.
+ * Used in chat for the OpenAI callback: this way the full session token (which grants
+ * full account access) never leaves our infrastructure. This token does not authenticate
+ * against the main API — it's only recognized by `resolveMcpContext`.
  */
 export async function mintMcpToken(userId: string): Promise<string> {
   const token = randomBytes(32).toString('base64url')
@@ -24,11 +24,11 @@ export async function resolveMcpContext(req: FastifyRequest): Promise<McpContext
   const token = (req.headers.authorization ?? '').replace('Bearer ', '').trim()
   if (!token) throw new AppError('Unauthorized', 401)
 
-  // 1) Token efêmero com escopo MCP (emitido para o callback da OpenAI no chat)
+  // 1) Ephemeral MCP-scoped token (issued for the OpenAI callback in chat)
   const scoped = await cacheGet<{ userId: string }>(`mcp:scoped:${token}`)
   if (scoped) return { userId: scoped.userId, sessionToken: token }
 
-  // 2) Token de sessão completo (clientes MCP diretos)
+  // 2) Full session token (direct MCP clients)
   const cacheKey = `mcp:session:${token}`
   const cached = await cacheGet<{ userId: string }>(cacheKey)
   if (cached) return { userId: cached.userId, sessionToken: token }

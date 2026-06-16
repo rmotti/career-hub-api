@@ -17,7 +17,7 @@ export async function listClubStints(saveId: string) {
     orderBy: { createdAt: 'asc' },
   })
 
-  // Verificar existência do save somente quando não há stints (evita query extra no caminho feliz)
+  // Check the save exists only when there are no stints (avoids an extra query on the happy path)
   if (stints.length === 0) {
     const save = await prisma.save.findUnique({ where: { id: saveId }, select: { id: true } })
     if (!save) throw new NotFoundError('Save não encontrado.')
@@ -28,7 +28,7 @@ export async function listClubStints(saveId: string) {
 }
 
 export async function getCurrentClubStint(saveId: string) {
-  // Reutiliza o cache da lista para evitar query extra
+  // Reuse the list cache to avoid an extra query
   const stints = await listClubStints(saveId)
   const current = (stints as Array<{ isCurrent: boolean }>).find((s) => s.isCurrent)
   if (!current) throw new NotFoundError('Nenhum clube ativo encontrado para este save.')
@@ -59,8 +59,8 @@ export async function createClubStint(saveId: string, data: { club: string; euro
   })
 
   const newStint = await prisma.$transaction(async (tx) => {
-    // Trocar de clube é destrutivo (desvincula o elenco inteiro): snapshot de segurança +
-    // auditoria antes de qualquer mutação, atômico com a troca. Undo via restore do snapshot.
+    // Changing clubs is destructive (detaches the whole squad): safety snapshot +
+    // audit before any mutation, atomic with the change. Undo via the snapshot restore.
     await createSnapshot(tx, saveId, userId, 'pre-club-change')
     await writeAudit(tx, {
       userId,
@@ -142,8 +142,8 @@ export async function createClubStint(saveId: string, data: { club: string; euro
     `save:${saveId}:team-stats:${save.currentSeason}`,
     `save:${saveId}:team-stats:current`,
   )
-  // Trocar de clube destaca o elenco inteiro — invalida todas as chaves de players
-  // (inclui loaned e seasons históricas, que a lista manual não cobria).
+  // Changing clubs detaches the whole squad — invalidate every player key
+  // (includes loaned and historical seasons, which the manual list didn't cover).
   await invalidatePlayersCache(saveId)
 
   return newStint

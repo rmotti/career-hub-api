@@ -18,17 +18,17 @@ export interface FitScoreResult {
 }
 
 const FIT_SCORE_TIMEOUT_MS = 3000
-// A partir de quantas falhas seguidas o serviço é considerado "down" (não só degradado).
+// How many consecutive failures before the service is considered "down" (not just degraded).
 const DOWN_THRESHOLD = 3
 
 type FitScoreOutcome = 'ok' | 'timeout' | 'http_error' | 'network_error'
 export type FitScoreStatus = 'ok' | 'degraded' | 'down' | 'unknown' | 'unconfigured'
 
-// Estado de saúde em processo. O acoplamento ao serviço de fit-score falha aberto
-// (scores nulos), então sem este sinal a degradação é invisível — era o débito #18.
-// Observação multi-réplica (#19): contadores em processo são por-réplica; cada uma
-// reporta a própria saúde. Como hoje roda 1 réplica, basta; documentado para não virar
-// estado compartilhado implícito.
+// In-process health state. The coupling to the fit-score service fails open
+// (null scores), so without this signal the degradation is invisible — this was debt #18.
+// Multi-replica note (#19): in-process counters are per-replica; each one
+// reports its own health. Since it runs 1 replica today, that's enough; documented so it
+// doesn't become implicit shared state.
 const health = {
   totalCalls: 0,
   okCalls: 0,
@@ -58,7 +58,7 @@ function record(outcome: FitScoreOutcome, info: { durationMs: number; status?: n
   health.lastError = info.error ?? `HTTP ${info.status}`
   health.lastFailureAt = new Date().toISOString()
 
-  // Sinal estruturado em produção (o antigo console.warn era silenciado em prod — o bug do #18).
+  // Structured signal in production (the old console.warn was silenced in prod — the #18 bug).
   logger.warn(
     {
       service: 'fit-score',
@@ -73,10 +73,10 @@ function record(outcome: FitScoreOutcome, info: { durationMs: number; status?: n
 }
 
 /**
- * Snapshot de saúde do acoplamento com o serviço de fit-score, derivado do tráfego real
- * (passivo — reflete como o serviço respondeu aos usuários, não um ping sintético).
- * `lastError` fica de fora de propósito: pode conter o host interno do serviço; ele vai
- * só para o log estruturado, não para a resposta HTTP pública.
+ * Health snapshot of the coupling with the fit-score service, derived from real traffic
+ * (passive — reflects how the service responded to users, not a synthetic ping).
+ * `lastError` is left out on purpose: it may contain the service's internal host; it goes
+ * only to the structured log, not to the public HTTP response.
  */
 export function getFitScoreHealth() {
   const configured = !!process.env.FIT_SCORE_SERVICE_URL
@@ -164,7 +164,7 @@ export async function fetchFitScoreBatch(
     )
   } catch (error) {
     const durationMs = Date.now() - startedAt
-    // AbortSignal.timeout aborta com TimeoutError (AbortError em runtimes mais antigos).
+    // AbortSignal.timeout aborts with TimeoutError (AbortError on older runtimes).
     const isTimeout = error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError')
     record(isTimeout ? 'timeout' : 'network_error', {
       durationMs,

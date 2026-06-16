@@ -36,8 +36,8 @@ export const auth = betterAuth({
     },
   },
 
-  // Qualquer update no usuário (ban, troca de role/plano) invalida o cache de sessão
-  // dele, fechando a janela de revogação de até 5 min. Roda após o commit da transação.
+  // Any update to the user (ban, role/plan change) invalidates their session
+  // cache, closing the up-to-5-min revocation window. Runs after the transaction commits.
   databaseHooks: {
     user: {
       update: {
@@ -51,7 +51,7 @@ export const auth = betterAuth({
   trustedOrigins: getTrustedOrigins(),
 
   rateLimit: {
-    // DISABLE_RATE_LIMIT é um foot-gun de load test: nunca deve desligar o limiter em produção.
+    // DISABLE_RATE_LIMIT is a load-test foot-gun: it must never disable the limiter in production.
     enabled: process.env.NODE_ENV === 'production' || process.env.DISABLE_RATE_LIMIT !== 'true',
     window: 60,
     max: 100,

@@ -15,7 +15,7 @@ const errorResponse = {
   },
 }
 
-// Campos escalares do Transfer + feeFormatted (de formatTransferResponse).
+// Transfer scalar fields + feeFormatted (from formatTransferResponse).
 const transferScalarProperties = {
   id: { type: 'string' },
   saveId: { type: 'string' },
@@ -30,7 +30,7 @@ const transferScalarProperties = {
   feeFormatted: { type: 'string' },
 }
 
-// A listagem embute um resumo do player; as mutações trazem clubStintId.
+// The list embeds a player summary; the mutations carry clubStintId.
 const transferListItemResponse = {
   type: 'object',
   additionalProperties: false,
@@ -62,7 +62,7 @@ const transferMutationResponse = {
   },
 }
 
-// Resumo do save retornado por formatSaveResponse em createTransfer.
+// Save summary returned by formatSaveResponse in createTransfer.
 const saveSummaryResponse = {
   type: 'object',
   nullable: true,

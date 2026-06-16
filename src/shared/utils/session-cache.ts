@@ -5,9 +5,9 @@ const sessionKey = (token: string) => `session:${token}`
 const userSessionsKey = (userId: string) => `user-sessions:${userId}`
 
 /**
- * Cacheia a sessão e mantém um índice reverso `user-sessions:<userId>` -> tokens,
- * para permitir revogação em lote quando o usuário é banido ou tem o plano alterado.
- * O índice é best-effort: falhas nele nunca quebram o fluxo de autenticação.
+ * Caches the session and maintains a reverse index `user-sessions:<userId>` -> tokens,
+ * to allow batch revocation when the user is banned or has their plan changed.
+ * The index is best-effort: failures in it never break the authentication flow.
  */
 export async function cacheSession(
   token: string,
@@ -21,14 +21,14 @@ export async function cacheSession(
     await redis.sadd(userSessionsKey(userId), token)
     await redis.expire(userSessionsKey(userId), ttlSeconds)
   } catch {
-    // Silent failure — índice é opcional
+    // Silent failure — the index is optional
   }
 }
 
 /**
- * Invalida TODAS as sessões cacheadas de um usuário. Chamado quando o usuário muda
- * no banco (ban, troca de role/plano) via `databaseHooks` do Better Auth, fechando a
- * janela de até 5 min em que o cache serviria uma sessão obsoleta.
+ * Invalidates ALL of a user's cached sessions. Called when the user changes
+ * in the database (ban, role/plan change) via Better Auth's `databaseHooks`, closing the
+ * up-to-5-min window in which the cache would serve a stale session.
  */
 export async function invalidateUserSessions(userId: string): Promise<void> {
   try {
@@ -36,6 +36,6 @@ export async function invalidateUserSessions(userId: string): Promise<void> {
     const keys = [...tokens.map(sessionKey), userSessionsKey(userId)]
     await redis.del(...keys)
   } catch {
-    // Silent failure — cache é opcional
+    // Silent failure — the cache is optional
   }
 }

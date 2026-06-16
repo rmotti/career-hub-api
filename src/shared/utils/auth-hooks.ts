@@ -25,10 +25,10 @@ const SESSION_TTL = 5 * 60 // 5 minutos
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
 
 /**
- * Extrai o token de sessão. Lê PRIMEIRO o cookie httpOnly `session_token` (novo fluxo,
- * resistente a XSS) e cai para o header `Authorization: Bearer` (backward-compat, transição
- * sem downtime). O valor é o mesmo nos dois — o `token` cru devolvido no login —, então a
- * chave de cache e a validação no Better Auth convergem.
+ * Extracts the session token. Reads the httpOnly `session_token` cookie FIRST (new flow,
+ * XSS-resistant) and falls back to the `Authorization: Bearer` header (backward-compat,
+ * zero-downtime transition). The value is the same in both — the raw `token` returned at login —
+ * so the cache key and the Better Auth validation converge.
  */
 export function extractSessionToken(request: FastifyRequest): string {
   const cookieToken = parseCookies(request)[SESSION_COOKIE]
@@ -46,8 +46,8 @@ export async function getSession(request: FastifyRequest) {
     const cached = await cacheGet<object>(cacheKey)
     if (cached) return cached as Awaited<ReturnType<typeof auth.api.getSession>>
 
-    // Injeta o token como Bearer para que o plugin `bearer` do Better Auth valide tanto
-    // o que veio do cookie quanto o que veio do header pelo mesmo caminho.
+    // Inject the token as Bearer so Better Auth's `bearer` plugin validates both
+    // what came from the cookie and what came from the header through the same path.
     const session = await auth.api.getSession({
       headers: { authorization: `Bearer ${token}` },
       query,
@@ -57,7 +57,7 @@ export async function getSession(request: FastifyRequest) {
     return session
   }
 
-  // Sem token explícito → deixa o Better Auth tentar o cookie nativo dele (backward-compat).
+  // No explicit token → let Better Auth try its own native cookie (backward-compat).
   return auth.api.getSession({ headers: request.headers as HeadersInit, query })
 }
 
@@ -66,22 +66,22 @@ export async function invalidateSessionCache(token: string) {
 }
 
 /**
- * Proteção CSRF (double-submit) para o fluxo por cookie. Como o cookie de sessão é
- * `SameSite=None`, o browser o envia em requisições cross-site → exigimos prova de que
- * a requisição partiu do nosso frontend: o header `X-CSRF-Token` precisa bater com o
- * cookie `csrf_token`.
+ * CSRF protection (double-submit) for the cookie flow. Since the session cookie is
+ * `SameSite=None`, the browser sends it on cross-site requests → we require proof that
+ * the request came from our frontend: the `X-CSRF-Token` header must match the
+ * `csrf_token` cookie.
  *
- * Só vale para escritas (POST/PUT/PATCH/DELETE) AUTENTICADAS POR COOKIE. Requisições com
- * Bearer não sofrem CSRF (o browser não anexa o header `Authorization` automaticamente, e
- * clientes não-browser — MCP, mobile — não estão sujeitos a CSRF), então passam direto.
- * Isso preserva o zero-downtime: clientes Bearer legados seguem funcionando sem header CSRF.
+ * Only applies to writes (POST/PUT/PATCH/DELETE) AUTHENTICATED BY COOKIE. Bearer requests
+ * are not subject to CSRF (the browser doesn't attach the `Authorization` header automatically, and
+ * non-browser clients — MCP, mobile — aren't subject to CSRF), so they pass straight through.
+ * This preserves zero-downtime: legacy Bearer clients keep working without a CSRF header.
  */
 export function csrfProtection() {
   return async function (request: FastifyRequest, _reply: FastifyReply) {
     if (SAFE_METHODS.has(request.method.toUpperCase())) return
 
     const cookies = parseCookies(request)
-    if (!cookies[SESSION_COOKIE]) return // não é fluxo por cookie → CSRF não se aplica
+    if (!cookies[SESSION_COOKIE]) return // not a cookie flow → CSRF doesn't apply
 
     const cookieToken = cookies[CSRF_COOKIE]
     const rawHeader = request.headers[CSRF_HEADER]
@@ -136,7 +136,7 @@ export function requirePlan(minimumPlan: UserPlan) {
     const userPlan = ((session.user as { plan?: string }).plan ?? 'FREE') as UserPlan
     const userRole = (session.user as { role?: string }).role as UserRole | undefined
 
-    // admin sempre passa
+    // admin always passes
     if (userRole === 'admin') {
       request.user = session.user
       request.session = session.session

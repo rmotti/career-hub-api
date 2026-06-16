@@ -14,7 +14,7 @@ export async function cacheSet(key: string, value: unknown, ttlSeconds: number):
   try {
     await redis.set(key, JSON.stringify(value), 'EX', ttlSeconds)
   } catch {
-    // Silent failure — cache é opcional, nunca quebra o fluxo principal
+    // Silent failure — cache is optional, never breaks the main flow
   }
 }
 

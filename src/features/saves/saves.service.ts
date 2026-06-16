@@ -189,8 +189,8 @@ export async function updateSave(
     if (seasonChanged && save.clubStints[0]) {
       const currentStint = save.clubStints[0]
 
-      // Avanço de temporada é irreversível: tira um snapshot antes de qualquer mutação
-      // (dentro da mesma transação, então é atômico com o avanço) e audita a ação.
+      // Season advance is irreversible: take a snapshot before any mutation
+      // (within the same transaction, so it's atomic with the advance) and audit the action.
       await createSnapshot(tx, saveId, userId, 'pre-season-advance')
       await writeAudit(tx, {
         userId,
@@ -199,7 +199,7 @@ export async function updateSave(
         meta: { from: save.currentSeason, to: data.currentSeason },
       })
 
-      // Verificar se alguma competição da temporada que está encerrando teve campeão
+      // Check whether any competition of the ending season had a champion
       const endingStats = await tx.teamSeasonStats.findMany({
         where: { clubStintId: currentStint.id, season: save.currentSeason },
         include: { competition: true },
@@ -254,7 +254,7 @@ export async function updateSave(
         data: { age: { increment: 1 } },
       })
 
-      // Criar TeamSeasonStats para a nova temporada (uma por competição do país + europeia opcional)
+      // Create TeamSeasonStats for the new season (one per country competition + optional European)
       const league = findLeagueByClub(currentStint.club)
       const country = league ? LEAGUE_TO_COUNTRY[league] : null
       const countryCompetitionIds = country ? await getCompetitionIdsByCountry(country) : []
@@ -319,8 +319,8 @@ export async function updateSave(
 
     txUpdatedSave = await tx.save.update({ where: { id: saveId }, data: saveData })
 
-    // Edição direta de dinheiro (fora do avanço de temporada): registra antes→depois no
-    // audit para rastreio e eventual reversão manual. Avanço já é auditado como season_advance.
+    // Direct money edit (outside the season advance): records before→after in the
+    // audit for tracing and possible manual reversal. The advance is already audited as season_advance.
     if (!seasonChanged) {
       const financeMeta: Record<string, { from: number | null; to: number }> = {}
       if (data.budget !== undefined && data.budget !== save.budget) {
@@ -365,7 +365,7 @@ export async function updateSave(
 }
 
 /**
- * Lista os saves arquivados (soft-deleted) do usuário, para a "lixeira"/recuperação.
+ * Lists the user's archived (soft-deleted) saves, for the "trash"/recovery view.
  */
 export async function listDeletedSaves(userId: string) {
   const saves = await prisma.save.findMany({
@@ -380,9 +380,9 @@ export async function listDeletedSaves(userId: string) {
 }
 
 /**
- * Deleta um save. Por padrão é SOFT (marca `deletedAt`, reversível) e tira um snapshot
- * `pre-delete`. Com `purge: true` apaga de vez (cascade + snapshots) — terminal.
- * Exige `confirm === saveId` em ambos os casos para evitar chamada acidental.
+ * Deletes a save. By default it's SOFT (marks `deletedAt`, reversible) and takes a
+ * `pre-delete` snapshot. With `purge: true` it deletes for good (cascade + snapshots) — terminal.
+ * Requires `confirm === saveId` in both cases to prevent an accidental call.
  */
 export async function deleteSave(
   saveId: string,
@@ -403,7 +403,7 @@ export async function deleteSave(
 
   if (opts.purge) {
     await prisma.$transaction(async (tx) => {
-      // Audita ANTES (o AuditLog não tem FK ao save, então sobrevive ao purge).
+      // Audit BEFORE (the AuditLog has no FK to the save, so it survives the purge).
       await writeAudit(tx, { userId, saveId, action: 'save.purge', meta: { name: save.name } })
       await tx.save.delete({ where: { id: saveId } })
     })
@@ -412,7 +412,7 @@ export async function deleteSave(
     return { purged: true as const }
   }
 
-  // Soft-delete: snapshot de segurança + marca deletedAt, tudo atômico.
+  // Soft-delete: safety snapshot + marks deletedAt, all atomic.
   if (save.deletedAt) return { purged: false as const, deletedAt: save.deletedAt }
   await prisma.$transaction(async (tx) => {
     await createSnapshot(tx, saveId, userId, 'pre-delete')
@@ -425,9 +425,9 @@ export async function deleteSave(
 }
 
 /**
- * Des-arquiva um save soft-deleted (limpa `deletedAt`). Recuperação simples do caso
- * "deletei sem querer" — os dados não foram alterados pelo soft-delete. Para reverter um
- * avanço de temporada use o restore por snapshot.
+ * Un-archives a soft-deleted save (clears `deletedAt`). Simple recovery for the
+ * "I deleted it by accident" case — the data wasn't altered by the soft-delete. To revert a
+ * season advance use the snapshot restore.
  */
 export async function restoreSave(saveId: string, userId: string) {
   const save = await prisma.save.findUnique({ where: { id: saveId } })
