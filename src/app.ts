@@ -54,7 +54,10 @@ app.register(cors, {
   // Authorization (Bearer legado) + X-CSRF-Token (double-submit do fluxo por cookie).
   allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token'],
   // Permite o SPA ler o token CSRF da resposta (além do corpo do login).
-  exposedHeaders: ['X-CSRF-Token', 'set-auth-token'],
+  // `set-auth-token` NÃO é exposto: o cutover para cookie httpOnly está concluído e o SPA
+  // não consome esse header — expô-lo só deixaria o token de sessão alcançável por XSS.
+  // Clientes não-browser (MCP/mobile) continuam usando Authorization: Bearer (bearer plugin).
+  exposedHeaders: ['X-CSRF-Token'],
   maxAge: 86400,
 })
 
