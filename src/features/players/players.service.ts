@@ -3,7 +3,7 @@ import { NotFoundError, AppError } from '../../shared/utils/errors.js'
 import { formatMarketValue, formatSalary } from '../../shared/utils/currency.js'
 import { Position, PlayerStatus } from '@prisma/client'
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library'
-import { cacheGet, cacheSet, cacheInvalidate } from '../../shared/utils/cache.js'
+import { cacheGet, cacheSet, cacheInvalidate, cacheInvalidatePattern } from '../../shared/utils/cache.js'
 import { createSnapshot, writeAudit } from '../saves/snapshots.service.js'
 
 const TTL = {
@@ -479,7 +479,7 @@ export async function updatePlayer(
     })
   }
 
-  await invalidatePlayersCache(saveId, playerId)
+  await invalidatePlayersCache(saveId)
 
   return formatPlayer(updatedPlayer)
 }
@@ -543,8 +543,13 @@ export async function updatePlayerStats(
     throw e
   }
 
+  // Caminho quente (edição de stats da temporada atual): invalidação por chaves
+  // exatas, sem SCAN. Só a temporada atual muda; `players` entra porque a lista
+  // cheia agrega os totais de todas as temporadas por jogador. Seasons históricas
+  // e `players:loaned` não são afetadas (o jogador está no elenco ativo).
   await cacheInvalidate(
     `save:${saveId}:player:${playerId}`,
+    `save:${saveId}:players`,
     `save:${saveId}:players:active`,
     `save:${saveId}:players:active:${updated.season}`,
   )
@@ -664,15 +669,22 @@ export async function releasePlayer(saveId: string, playerId: string, userId: st
     })
   })
 
-  await invalidatePlayersCache(saveId, playerId)
+  await invalidatePlayersCache(saveId)
 
   return result
 }
 
-async function invalidatePlayersCache(saveId: string, playerId?: string) {
-  const keys = [`save:${saveId}:players`, `save:${saveId}:players:active`]
-  if (playerId) keys.push(`save:${saveId}:player:${playerId}`)
-  await cacheInvalidate(...keys)
+/**
+ * Invalida TODAS as chaves de cache de jogadores de um save de uma vez:
+ * `players`, `players:active`, `players:active:<season>` (qualquer temporada
+ * histórica), `players:loaned` e `player:<id>`. Todas começam com o prefixo
+ * `save:<id>:player`, então um único pattern cobre o conjunto inteiro — inclusive
+ * as chaves por-temporada que não dá pra enumerar sem conhecer as seasons.
+ * Exportada para os serviços que mexem no elenco (transfers, club-stints) usarem
+ * a mesma fonte de verdade em vez de listar chaves à mão (e esquecer alguma).
+ */
+export async function invalidatePlayersCache(saveId: string) {
+  await cacheInvalidatePattern(`save:${saveId}:player*`)
 }
 
 async function checkShirtNumberConflict(

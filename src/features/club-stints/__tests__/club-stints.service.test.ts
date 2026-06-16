@@ -31,6 +31,7 @@ vi.mock('../../../shared/utils/cache.js', () => ({
   cacheGet: vi.fn(),
   cacheSet: vi.fn(),
   cacheInvalidate: vi.fn(),
+  cacheInvalidatePattern: vi.fn(),
 }))
 
 import { prisma } from '../../../shared/lib/prisma.js'

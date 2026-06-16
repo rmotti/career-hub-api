@@ -3,6 +3,7 @@ import { AppError, NotFoundError } from '../../shared/utils/errors.js'
 import { clubExists, findLeagueByClub, LEAGUE_TO_COUNTRY } from '../clubs/clubs.service.js'
 import { cacheGet, cacheSet, cacheInvalidate } from '../../shared/utils/cache.js'
 import { createSnapshot, writeAudit } from '../saves/snapshots.service.js'
+import { invalidatePlayersCache } from '../players/players.service.js'
 
 const TTL_CLUB_STINTS = 60 * 60 // 1h
 
@@ -140,9 +141,10 @@ export async function createClubStint(saveId: string, data: { club: string; euro
     `save:${saveId}:team-stats`,
     `save:${saveId}:team-stats:${save.currentSeason}`,
     `save:${saveId}:team-stats:current`,
-    `save:${saveId}:players`,
-    `save:${saveId}:players:active`,
   )
+  // Trocar de clube destaca o elenco inteiro — invalida todas as chaves de players
+  // (inclui loaned e seasons históricas, que a lista manual não cobria).
+  await invalidatePlayersCache(saveId)
 
   return newStint
 }

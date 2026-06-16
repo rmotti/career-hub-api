@@ -4,6 +4,7 @@ import { formatBalance, formatMarketValue } from '../../shared/utils/currency.js
 import { TransferType, Position, PlayerStatus } from '@prisma/client'
 import { cacheGet, cacheSet, cacheInvalidate } from '../../shared/utils/cache.js'
 import { createSnapshot, writeAudit } from '../saves/snapshots.service.js'
+import { invalidatePlayersCache } from '../players/players.service.js'
 
 const TTL_TRANSFERS = 60 * 30 // 30 min
 
@@ -209,7 +210,10 @@ export async function createTransfer(
     return { transfer: newTransfer, playerId: resolvedPlayerId, save: updatedSave }
   })
 
-  await cacheInvalidate(`save:${saveId}:transfers`, `save:${saveId}:transfers:current`, `save:${saveId}:players:loaned`)
+  await cacheInvalidate(`save:${saveId}:transfers`, `save:${saveId}:transfers:current`)
+  // Saídas (venda/empréstimo) tiram o jogador do elenco e mudam seu status —
+  // invalida todas as chaves de players (active, loaned, seasons e o detalhe).
+  await invalidatePlayersCache(saveId)
 
   return {
     transfer: formatTransferResponse(result.transfer),
@@ -339,14 +343,9 @@ export async function reverseTransfer(saveId: string, tid: string, userId: strin
     await tx.transfer.delete({ where: { id: tid } })
   })
 
-  await cacheInvalidate(
-    `save:${saveId}:transfers`,
-    `save:${saveId}:transfers:current`,
-    `save:${saveId}:players`,
-    `save:${saveId}:players:active`,
-    `save:${saveId}:players:loaned`,
-    ...(transfer.playerId ? [`save:${saveId}:player:${transfer.playerId}`] : []),
-  )
+  await cacheInvalidate(`save:${saveId}:transfers`, `save:${saveId}:transfers:current`)
+  // Reverter recoloca/retira o jogador do elenco — invalida todas as chaves de players.
+  await invalidatePlayersCache(saveId)
 
   return { reversed: true as const }
 }
