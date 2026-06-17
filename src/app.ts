@@ -25,6 +25,7 @@ import { healthRoutes } from './features/health/health.routes.js'
 import { mcpPlugin } from './mcp/plugin.js'
 import { getTrustedOrigins, isCredentialedOriginAllowed } from './shared/utils/origins.js'
 import { httpRequestStarted, httpRequestFinished, recordHttpRequest } from './shared/lib/metrics.js'
+import { isTransientDbError } from './shared/lib/db-retry.js'
 
 export const app = Fastify({
   logger: {
@@ -224,6 +225,20 @@ app.setErrorHandler((error, _request, reply) => {
       error: error.message,
       statusCode: 400,
     })
+  }
+
+  // Transient infra blip (DB unreachable, connection dropped, pool timeout) — a typed,
+  // retryable 503 instead of a raw 500. Writes are not queued, so the client retries (#15).
+  if (isTransientDbError(error)) {
+    app.log.warn({ err: error }, 'Transient database error')
+    return reply
+      .header('Retry-After', '1')
+      .status(503)
+      .send({
+        error: 'SERVICE_UNAVAILABLE',
+        message: 'Banco de dados temporariamente indisponível. Tente novamente em instantes.',
+        statusCode: 503,
+      })
   }
 
   if (error.statusCode && error.statusCode < 500) {

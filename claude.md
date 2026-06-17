@@ -52,6 +52,7 @@ Clubs are **in-memory** in `clubs.service.ts` (no DB table). Competitions are in
 
 - Fastify route schemas define request validation (body, params, querystring) inline in `routes.ts`. Response schemas are not yet defined — adding them enables fast-json-stringify serialization.
 - `AppError(message, statusCode)` for expected errors; `NotFoundError` is a subclass. The global error handler in `app.ts` also catches `PrismaClientKnownRequestError` codes P2025, P2003, P2002.
+- **DB degradation contract** (`shared/lib/db-retry.ts`): transient infra errors (DB unreachable, dropped connection, pool timeout, engine panic) surface as a typed **503 `SERVICE_UNAVAILABLE` + `Retry-After`**, never a raw 500. There is **no write queue** — clients retry on 503 (make idempotent writes safe to retry). The Prisma client auto-retries only on pool-timeout (`P2024`), which is provably pre-execution so it can't double-apply a write or corrupt an interactive transaction; ambiguous mid-flight drops are not auto-retried.
 - `DISABLE_RATE_LIMIT=true` env var disables Better Auth's rate limiter — set this on Railway when running load tests, never in production traffic.
 - **Review checklist — no per-process state:** before approving a change, reject any new mutable in-process state (module-level `Map`/`Set`/array/object/counter, mutable singleton, in-memory cache or rate-limit counter). It would silently break under multiple replicas. Route it through Redis (`cache.ts` / `rate-limit.ts`) instead. See the stateless-process invariant under [Architecture](#architecture).
 
