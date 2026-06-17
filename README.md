@@ -448,3 +448,14 @@ As migrations de produção rodam no pre-deploy:
 ```bash
 npx prisma migrate deploy
 ```
+
+### Manutenção: aliases de clube do fit-score
+
+`src/shared/utils/fit-score-club-aliases.generated.ts` é **gerado** e precisa ser re-sincronizado quando os nomes de clube mudam (nova temporada do FC ou atualização do `fit-score-svc`). É um passo manual local — não roda no deploy:
+
+```bash
+npm run fit-score:clubs:sync    # regenera o arquivo (precisa do venv + club_profiles.pkl do fit-score-svc)
+npm run fit-score:clubs:check   # acusa defasagem se a planilha mudou sem re-sync
+```
+
+Runbook completo em [docs/.../3.6.9_Scout.md](docs/docs/03_Technical/Modules/3.6.9_Scout.md) (seção "Fit-score club-name aliases").

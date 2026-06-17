@@ -17,6 +17,7 @@
     "db:studio": "prisma studio",
     "db:seed-fc26": "tsx scripts/seed-fc26.ts",
     "fit-score:clubs:sync": "tsx scripts/sync-fit-score-club-aliases.ts",
+    "fit-score:clubs:check": "tsx scripts/check-fit-score-club-aliases.ts",
     "fit-score:clubs": "tsx scripts/generate-fit-score-club-alias-report.ts"
   },
   "dependencies": {
