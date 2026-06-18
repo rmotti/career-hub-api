@@ -44,10 +44,13 @@ interface CookieOptions {
 }
 
 /**
- * Serializes a cross-site cookie. In production it requires `SameSite=None; Secure` (mandatory
- * for different domains — Vercel frontend × Railway API) and `Partitioned` (CHIPS),
- * mirroring the `defaultCookieAttributes` Better Auth already uses. In dev (localhost http)
- * it falls back to `SameSite=Lax` without `Secure`, otherwise the browser rejects the cookie.
+ * Serializes the session/CSRF cookie. The SPA now talks to the API **same-origin** (Vercel
+ * rewrites `/api/*` to this API; Vite proxies in dev), so the cookie is first-party and we use
+ * `SameSite=Lax` — safer than the old cross-site `SameSite=None; Partitioned`, which existed only
+ * because the SPA used to hit the Railway domain directly (Safari ITP then dropped the cross-site
+ * cookie → random logouts). No `Domain` is ever set, so the cookie stays **host-only**: required
+ * because Vercel's rewrite forwards `Set-Cookie` without rewriting `Domain`. In production we keep
+ * `Secure`; in dev (localhost http) we drop it, otherwise the browser rejects the cookie.
  */
 function serialize(name: string, value: string, options: CookieOptions): string {
   const segments = [
@@ -57,11 +60,8 @@ function serialize(name: string, value: string, options: CookieOptions): string 
   ]
   if (options.httpOnly) segments.push('HttpOnly')
 
-  if (isProd()) {
-    segments.push('Secure', 'SameSite=None', 'Partitioned')
-  } else {
-    segments.push('SameSite=Lax')
-  }
+  segments.push('SameSite=Lax')
+  if (isProd()) segments.push('Secure')
 
   return segments.join('; ')
 }

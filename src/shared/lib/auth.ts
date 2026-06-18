@@ -57,12 +57,15 @@ export const auth = betterAuth({
     max: 100,
   },
 
+  // The SPA reaches the API same-origin (Vercel/Vite proxy `/api/*`), so Better Auth's own cookies
+  // are first-party: `SameSite=Lax` + `Secure` (was cross-site `none`/`partitioned`). We do NOT set
+  // `advanced.crossSubDomainCookies` and never set a `domain`, so every cookie stays host-only —
+  // mandatory because the Vercel rewrite forwards `Set-Cookie` without rewriting `Domain`.
   ...(process.env.NODE_ENV === 'production' && {
     advanced: {
       defaultCookieAttributes: {
-        sameSite: 'none',
+        sameSite: 'lax',
         secure: true,
-        partitioned: true,
       },
     },
   }),

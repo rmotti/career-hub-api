@@ -66,10 +66,11 @@ export async function invalidateSessionCache(token: string) {
 }
 
 /**
- * CSRF protection (double-submit) for the cookie flow. Since the session cookie is
- * `SameSite=None`, the browser sends it on cross-site requests → we require proof that
- * the request came from our frontend: the `X-CSRF-Token` header must match the
- * `csrf_token` cookie.
+ * CSRF protection (double-submit) for the cookie flow. The session cookie is now `SameSite=Lax`
+ * (same-origin SPA), which already blocks cross-site POST/PUT/PATCH/DELETE, but `Lax` still lets
+ * top-level cross-site GETs carry the cookie and isn't a substitute for CSRF on writes — so we keep
+ * requiring proof the request came from our frontend: the `X-CSRF-Token` header must match the
+ * non-httpOnly `csrf_token` cookie.
  *
  * Only applies to writes (POST/PUT/PATCH/DELETE) AUTHENTICATED BY COOKIE. Bearer requests
  * are not subject to CSRF (the browser doesn't attach the `Authorization` header automatically, and

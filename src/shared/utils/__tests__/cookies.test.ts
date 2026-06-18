@@ -41,7 +41,7 @@ describe('parseCookies', () => {
 })
 
 describe('cookie serialization (cross-site attributes)', () => {
-  it('production: SameSite=None; Secure; Partitioned; httpOnly only on session', () => {
+  it('production: host-only SameSite=Lax; Secure; httpOnly only on session', () => {
     process.env.NODE_ENV = 'production'
 
     const session = sessionCookie('the-token')
@@ -50,13 +50,17 @@ describe('cookie serialization (cross-site attributes)', () => {
     expect(session).toContain(`Max-Age=${SESSION_MAX_AGE}`)
     expect(session).toContain('HttpOnly')
     expect(session).toContain('Secure')
-    expect(session).toContain('SameSite=None')
-    expect(session).toContain('Partitioned')
+    expect(session).toContain('SameSite=Lax')
+    // host-only (Vercel rewrite forwards Set-Cookie without rewriting Domain) and no cross-site CHIPS
+    expect(session).not.toContain('Domain')
+    expect(session).not.toContain('SameSite=None')
+    expect(session).not.toContain('Partitioned')
 
     const csrf = csrfCookie('csrf-val')
     expect(csrf).toContain(`${CSRF_COOKIE}=csrf-val`)
-    expect(csrf).toContain('SameSite=None')
+    expect(csrf).toContain('SameSite=Lax')
     expect(csrf).toContain('Secure')
+    expect(csrf).not.toContain('Domain')
     expect(csrf).not.toContain('HttpOnly') // legível pelo JS (double-submit)
   })
 
