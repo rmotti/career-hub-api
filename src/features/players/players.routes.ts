@@ -138,6 +138,46 @@ const playerDetailResponse = {
         },
       },
     },
+    // Merged per-season view (F-004): OVR/MV aligned with per-club stats of that season.
+    seasons: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          season: { type: 'string' },
+          ovr: nullableInt,
+          marketValue: nullableNum,
+          clubs: {
+            type: 'array',
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                club: { type: 'string' },
+                ...seasonStatsProperties,
+              },
+            },
+          },
+        },
+      },
+    },
+    // Loan-spell stats (#4.4 B-001) — separate section, never merged into history/totals.
+    loanSpells: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          season: { type: 'string' },
+          loanClub: { type: 'string' },
+          goals: { type: 'integer' },
+          assists: { type: 'integer' },
+          matches: { type: 'integer' },
+          goalContributions: { type: 'integer' },
+        },
+      },
+    },
   },
 }
 
@@ -221,7 +261,7 @@ export async function playersRoutes(app: FastifyInstance) {
       schema: {
         tags: ['Players'],
         summary: 'Buscar jogador por ID',
-        description: 'Retorna o jogador com `totalStats` e `history` de todas as temporadas com nome do clube.',
+        description: 'Retorna o jogador com `totalStats`, `history` (por temporada/clube), `ovrHistory` (trajetória de OVR/valor), `seasons` (visão mesclada por temporada: OVR/valor + stats por clube em `clubs[]`) e `loanSpells` (stats informativas de empréstimo, #4.4 B-001 — nunca somam no histórico).',
         params: {
           type: 'object',
           properties: {

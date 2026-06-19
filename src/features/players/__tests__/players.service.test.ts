@@ -31,7 +31,7 @@ vi.mock('../../saves/snapshots.service.js', () => ({
 
 import { prisma } from '../../../shared/lib/prisma.js'
 import { writeAudit } from '../../saves/snapshots.service.js'
-import { createPlayer, updatePlayer, recallLoanedPlayer, getLoanSpellStats, upsertLoanSpellStats } from '../players.service.js'
+import { createPlayer, updatePlayer, recallLoanedPlayer, getLoanSpellStats, upsertLoanSpellStats, getPlayerById } from '../players.service.js'
 
 const mockedPrisma = prisma as unknown as {
   save: { findUnique: ReturnType<typeof vi.fn> }
@@ -294,5 +294,64 @@ describe('loan-spell stats (B-001)', () => {
 
     await expect(upsertLoanSpellStats(SAVE_ID, PLAYER_ID, { goals: 1 })).rejects.toMatchObject({ statusCode: 400 })
     expect(mockedPrisma.loanSpellStats.upsert).not.toHaveBeenCalled()
+  })
+})
+
+describe('getPlayerById — per-season history (F-004)', () => {
+  function stat(season: string, club: string, goals: number, assists: number, matches: number) {
+    return { season, goals, assists, matches, yellowCards: 0, redCards: 0, cleanSheets: 0, clubStint: { club } }
+  }
+
+  it('builds merged `seasons` (OVR/MV + per-club stats), separate `loanSpells`, and career totals', async () => {
+    mockedPrisma.save.findUnique.mockResolvedValue({ id: SAVE_ID })
+    mockedPrisma.player.findFirst.mockResolvedValue({
+      id: PLAYER_ID,
+      name: 'Trajetória',
+      marketValue: 50,
+      salary: 100,
+      seasonStats: [
+        // mid-season club change → two rows for 2026/27
+        stat('2026/27', 'Club A', 5, 3, 18),
+        stat('2026/27', 'Club B', 7, 2, 16),
+        stat('2025/26', 'Club A', 10, 6, 34),
+      ],
+      ovrHistory: [
+        { season: '2025/26', ovr: 80, marketValue: 40 },
+        { season: '2026/27', ovr: 84, marketValue: 50 },
+        // OVR snapshot with no stats yet → still appears in seasons
+        { season: '2027/28', ovr: 86, marketValue: 60 },
+      ],
+      loanSpellStats: [
+        { season: '2024/25', loanClub: 'Loan FC', goals: 4, assists: 1, matches: 20 },
+      ],
+    })
+
+    const result = await getPlayerById(SAVE_ID, PLAYER_ID) as {
+      totalStats: { goals: number; assists: number; goalContributions: number }
+      seasons: Array<{ season: string; ovr: number | null; marketValue: number | null; clubs: Array<{ club: string; goalContributions: number }> }>
+      loanSpells: Array<{ season: string; loanClub: string; goalContributions: number }>
+    }
+
+    // totals exclude loan-spell numbers
+    expect(result.totalStats.goals).toBe(22)
+    expect(result.totalStats.assists).toBe(11)
+    expect(result.totalStats.goalContributions).toBe(33)
+
+    // seasons sorted chronologically
+    expect(result.seasons.map(s => s.season)).toEqual(['2025/26', '2026/27', '2027/28'])
+
+    // multi-club season carries both clubs
+    const s2627 = result.seasons.find(s => s.season === '2026/27')!
+    expect(s2627.ovr).toBe(84)
+    expect(s2627.clubs.map(c => c.club)).toEqual(['Club A', 'Club B'])
+    expect(s2627.clubs.find(c => c.club === 'Club B')!.goalContributions).toBe(9)
+
+    // OVR-only season has no clubs
+    expect(result.seasons.find(s => s.season === '2027/28')!.clubs).toEqual([])
+
+    // loan spells surfaced separately, never merged into seasons
+    expect(result.loanSpells).toHaveLength(1)
+    expect(result.loanSpells[0]).toMatchObject({ season: '2024/25', loanClub: 'Loan FC', goalContributions: 5 })
+    expect(result.seasons.some(s => s.season === '2024/25')).toBe(false)
   })
 })

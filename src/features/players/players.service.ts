@@ -278,6 +278,7 @@ async function fetchPlayerById(saveId: string, playerId: string) {
       where: { id: playerId, saveId },
       include: {
         seasonStats: {
+          orderBy: { season: 'asc' },
           select: {
             season: true,
             goals: true,
@@ -293,6 +294,10 @@ async function fetchPlayerById(saveId: string, playerId: string) {
           orderBy: { createdAt: 'asc' },
           take: 20,
           select: { season: true, ovr: true, marketValue: true },
+        },
+        loanSpellStats: {
+          orderBy: { season: 'asc' },
+          select: { season: true, loanClub: true, goals: true, assists: true, matches: true },
         },
       },
     }),
@@ -333,8 +338,57 @@ async function fetchPlayerById(saveId: string, playerId: string) {
     marketValue: h.marketValue,
   }))
 
-  const { seasonStats: _, ovrHistory: __, ...playerData } = player
-  return { ...formatPlayer(playerData), totalStats, history, ovrHistory }
+  // Merged per-season view (F-004): OVR/market-value trajectory aligned with the
+  // per-club stats of that season. `clubs[]` handles a mid-season club change (two
+  // PlayerSeasonStats rows for one season). Keyed by the union of both sources so a
+  // season with an OVR snapshot but no stats (or vice-versa) still appears.
+  type SeasonClub = {
+    club: string
+    goals: number
+    assists: number
+    matches: number
+    yellowCards: number
+    redCards: number
+    cleanSheets: number
+    goalContributions: number
+  }
+  const seasonMap = new Map<
+    string,
+    { season: string; ovr: number | null; marketValue: number | null; clubs: SeasonClub[] }
+  >()
+  for (const h of player.ovrHistory) {
+    seasonMap.set(h.season, { season: h.season, ovr: h.ovr, marketValue: h.marketValue, clubs: [] })
+  }
+  for (const s of player.seasonStats) {
+    const entry =
+      seasonMap.get(s.season) ?? { season: s.season, ovr: null, marketValue: null, clubs: [] }
+    entry.clubs.push({
+      club: s.clubStint.club,
+      goals: s.goals,
+      assists: s.assists,
+      matches: s.matches,
+      yellowCards: s.yellowCards,
+      redCards: s.redCards,
+      cleanSheets: s.cleanSheets,
+      goalContributions: s.goals + s.assists,
+    })
+    seasonMap.set(s.season, entry)
+  }
+  const seasons = [...seasonMap.values()].sort((a, b) => a.season.localeCompare(b.season))
+
+  // Loan-spell stats (#4.4 B-001) — surfaced as a SEPARATE section, never merged into
+  // `seasons`/`history`/totals (informational only, by design).
+  const loanSpells = player.loanSpellStats.map((l) => ({
+    season: l.season,
+    loanClub: l.loanClub,
+    goals: l.goals,
+    assists: l.assists,
+    matches: l.matches,
+    goalContributions: l.goals + l.assists,
+  }))
+
+  const { seasonStats: _, ovrHistory: __, loanSpellStats: ___, ...playerData } = player
+  return { ...formatPlayer(playerData), totalStats, history, ovrHistory, seasons, loanSpells }
 }
 
 export async function createPlayer(
