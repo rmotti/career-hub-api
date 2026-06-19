@@ -34,6 +34,14 @@ One file per feature folder (`src/features/<name>/`), grouped by responsibility:
 - [3.6.10 Chat (Junior / Mister)](03_Technical/Modules/3.6.10_Chat.md)
 - [3.6.11 MCP Server](03_Technical/Modules/3.6.11_MCP_Server.md)
 
+### [04_Next_Steps](04_Next_Steps/)
+The item-level backlog the [Roadmap](01_Product/1.2_Roadmap.md) themes resolve into, split so each item lives in exactly one place:
+- [4.0 Overview & Progressive Plan](04_Next_Steps/4.0_Overview.md) — FE/API split of the current backlog and the phased plan.
+- [4.1 Corrections](04_Next_Steps/4.1_Corrections.md) — defects: actual behavior diverges from intended.
+- [4.2 Features](04_Next_Steps/4.2_Features.md) — net-new capability the API doesn't have today.
+- [4.3 Improvements](04_Next_Steps/4.3_Improvements.md) — non-functional polish of already-correct behavior.
+- [4.4 Business Rule Changes](04_Next_Steps/4.4_Business_Rule_Changes.md) — deliberate redefinition of a domain rule (links [2.1](02_Domain/2.1_Business_Rules.md)).
+
 ### Top-level
 - [AI_RULES.md](AI_RULES.md) — operational rules for AI agents working in this repo.
 
