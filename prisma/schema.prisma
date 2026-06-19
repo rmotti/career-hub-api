@@ -84,6 +84,7 @@ model Save {
   shortlistItems ShortlistItem[]
   savedSearches SavedSearch[]
   snapshots     SaveSnapshot[]
+  loanSpellStats LoanSpellStats[]
 
   @@index([userId, deletedAt])
 }
@@ -201,6 +202,7 @@ model Player {
   ovrHistory        PlayerOvrHistory[]
   seasonStats       PlayerSeasonStats[]
   transfers         Transfer[]
+  loanSpellStats    LoanSpellStats[]
 
   @@index([saveId])
   @@index([saveId, activeClubStintId])
@@ -237,6 +239,32 @@ model PlayerSeasonStats {
 
   @@unique([playerId, clubStintId, season])
   @@index([clubStintId, season])
+}
+
+// Goals/assists/matches a player records WHILE OUT ON LOAN at another club (#4.4 B-001).
+// Deliberately decoupled from PlayerSeasonStats: these numbers are INFORMATIONAL ONLY
+// and must NEVER aggregate into anything — not the player's career history, not the
+// History-tab records/rankings, not the club's TeamSeasonStats. Storing them here (rather
+// than via a flag on PlayerSeasonStats) makes that impossible to leak: no aggregation query
+// touches this table. `transferId`/`loanClub` are a soft reference to the originating
+// emprestimo_saida transfer (no FK, so reversing the transfer never cascades these away).
+model LoanSpellStats {
+  id          String   @id @default(uuid())
+  saveId      String
+  playerId    String
+  transferId  String?
+  loanClub    String
+  season      String
+  goals       Int      @default(0)
+  assists     Int      @default(0)
+  matches     Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  player      Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  save        Save     @relation(fields: [saveId], references: [id], onDelete: Cascade)
+
+  @@unique([playerId, season])
+  @@index([saveId])
 }
 
 model Competition {
@@ -280,6 +308,9 @@ model Transfer {
   createdAt   DateTime     @default(now())
   fee         Float?
   clubStintId String?
+  // Loan duration (#4.4 B-002): the season at which an emprestimo_saida player auto-returns
+  // on a season advance. null = legacy single-season loan (returns at the next advance).
+  returnSeason String?
   clubStint   ClubStint?   @relation(fields: [clubStintId], references: [id])
   player      Player?      @relation(fields: [playerId], references: [id])
   save        Save         @relation(fields: [saveId], references: [id], onDelete: Cascade)

@@ -26,6 +26,7 @@ export type AuditAction =
   | 'save.finance_edit'
   | 'transfer.reverse'
   | 'player.release'
+  | 'player.loan_recall'
   | 'clubstint.change'
   | 'squad.import'
 

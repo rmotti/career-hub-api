@@ -5,6 +5,7 @@ const txMock = {
   save: { update: vi.fn() },
   player: { update: vi.fn(), create: vi.fn(), findFirst: vi.fn() },
   playerSeasonStats: { createMany: vi.fn() },
+  loanSpellStats: { create: vi.fn() },
   transfer: { create: vi.fn(), update: vi.fn(), delete: vi.fn() },
 }
 
@@ -197,7 +198,7 @@ describe('createTransfer (balance math + squad)', () => {
     expect(result.save?.balance).toBe(100) // saldo original, intocado
   })
 
-  it('emprestimo_saida: não mexe no saldo, remove do elenco e marca Loan', async () => {
+  it('emprestimo_saida: não mexe no saldo, remove do elenco, marca Loan, define returnSeason e abre LoanSpellStats', async () => {
     mockSaveForCreate(100)
     mockedPrisma.player.findFirst.mockResolvedValue({ id: PLAYER_ID, name: 'Cedido', activeClubStintId: STINT_ID })
     txMock.transfer.create.mockResolvedValue({ id: 'tr-new', fee: null })
@@ -211,6 +212,34 @@ describe('createTransfer (balance math + squad)', () => {
       data: { activeClubStintId: null, status: PlayerStatus.Loan },
     })
     expect(txMock.save.update).not.toHaveBeenCalled()
+    // B-002: default 1 temporada → returnSeason = próxima temporada
+    expect(txMock.transfer.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ type: TransferType.emprestimo_saida, returnSeason: '2026/27' }),
+    }))
+    // B-001: abre a linha informativa de loan-spell stats da temporada
+    expect(txMock.loanSpellStats.create).toHaveBeenCalledWith({
+      data: { saveId: SAVE_ID, playerId: PLAYER_ID, transferId: 'tr-new', loanClub: 'Y', season: '2025/26' },
+    })
+  })
+
+  it('emprestimo_saida com loanSeasons=2 define returnSeason 2 temporadas à frente (B-002)', async () => {
+    mockSaveForCreate(100)
+    mockedPrisma.player.findFirst.mockResolvedValue({ id: PLAYER_ID, name: 'Cedido', activeClubStintId: STINT_ID })
+    txMock.transfer.create.mockResolvedValue({ id: 'tr-new', fee: null })
+
+    await createTransfer(SAVE_ID, {
+      playerName: 'Cedido', type: TransferType.emprestimo_saida, from: 'B', to: 'Y', season: '2025/26', playerId: PLAYER_ID, loanSeasons: 2,
+    })
+
+    expect(txMock.transfer.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ returnSeason: '2027/28' }),
+    }))
+  })
+
+  it('rejeita loanSeasons inválido (3) com 400 e não abre transação', async () => {
+    await expect(createTransfer(SAVE_ID, {
+      playerName: 'Cedido', type: TransferType.emprestimo_saida, from: 'B', to: 'Y', season: '2025/26', playerId: PLAYER_ID, loanSeasons: 3,
+    })).rejects.toMatchObject({ statusCode: 400 })
   })
 
   it('compra com fee 0 não atualiza o saldo', async () => {

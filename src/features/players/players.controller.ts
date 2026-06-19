@@ -111,3 +111,41 @@ export async function releasePlayer(
   )
   return reply.send(player)
 }
+
+export async function recallPlayer(
+  request: FastifyRequest<{ Params: { saveId: string; playerId: string } }>,
+  reply: FastifyReply
+) {
+  const player = await playersService.recallLoanedPlayer(
+    request.params.saveId,
+    request.params.playerId,
+    request.user!.id
+  )
+  return reply.send(player)
+}
+
+export async function getLoanSpellStats(
+  request: FastifyRequest<{ Params: { saveId: string; playerId: string } }>,
+  reply: FastifyReply
+) {
+  const stats = await playersService.getLoanSpellStats(
+    request.params.saveId,
+    request.params.playerId
+  )
+  return reply.send(stats)
+}
+
+export async function updateLoanSpellStats(
+  request: FastifyRequest<{
+    Params: { saveId: string; playerId: string }
+    Body: { goals?: number; assists?: number; matches?: number }
+  }>,
+  reply: FastifyReply
+) {
+  const stats = await playersService.upsertLoanSpellStats(
+    request.params.saveId,
+    request.params.playerId,
+    request.body
+  )
+  return reply.send(stats)
+}

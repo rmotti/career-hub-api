@@ -237,6 +237,32 @@ export async function updateSave(
         where: { saveId, activeClubStintId: currentStint.id },
       })
 
+      // Players currently out on loan from this stint. Fetched before the aging
+      // pass so they age alongside the active squad (C-001): they carry
+      // activeClubStintId = null, so the aging UPDATE must target them by id or
+      // they would never age while away. Reused by the loan-return block below.
+      const loanedPlayers = await tx.player.findMany({
+        where: {
+          saveId,
+          status: PlayerStatus.Loan,
+          activeClubStintId: null,
+          transfers: {
+            some: {
+              type: TransferType.emprestimo_saida,
+              clubStintId: currentStint.id,
+            },
+          },
+        },
+        include: {
+          transfers: {
+            where: { type: TransferType.emprestimo_saida, clubStintId: currentStint.id },
+            orderBy: { createdAt: 'desc' },
+            take: 1,
+            select: { id: true, to: true, returnSeason: true },
+          },
+        },
+      })
+
       if (activePlayers.length > 0) {
         await tx.playerOvrHistory.createMany({
           data: activePlayers.map((p) => ({
@@ -249,8 +275,18 @@ export async function updateSave(
         })
       }
 
+      // Aging: +1 per season advance for the active squad AND loaned-out players
+      // (C-001 — identical to squad players, no catch-up). Loaned-out players are
+      // matched by id since their activeClubStintId is null. Cap at 45.
       await tx.player.updateMany({
-        where: { saveId, activeClubStintId: currentStint.id, age: { lt: 45 } },
+        where: {
+          saveId,
+          age: { lt: 45 },
+          OR: [
+            { activeClubStintId: currentStint.id },
+            { id: { in: loanedPlayers.map((p) => p.id) } },
+          ],
+        },
         data: { age: { increment: 1 } },
       })
 
@@ -284,32 +320,47 @@ export async function updateSave(
         })
       }
 
-      const loanedPlayers = await tx.player.findMany({
-        where: {
-          saveId,
-          status: PlayerStatus.Loan,
-          activeClubStintId: null,
-          transfers: {
-            some: {
-              type: TransferType.emprestimo_saida,
-              clubStintId: currentStint.id,
-            },
-          },
-        },
-      })
+      // Loan return (#4.4 B-002): a loan ends once its returnSeason is reached
+      // (null = legacy single-season loan → returns at the next advance). Players
+      // still mid-loan (2-season) stay out for another season. Aging already
+      // covered both groups above (C-001), so this only handles re-attachment.
       if (loanedPlayers.length > 0) {
-        await tx.player.updateMany({
-          where: { id: { in: loanedPlayers.map((p) => p.id) } },
-          data: { activeClubStintId: currentStint.id, status: PlayerStatus.Role },
+        const newSeason = data.currentSeason!
+        const returning = loanedPlayers.filter((p) => {
+          const returnSeason = p.transfers?.[0]?.returnSeason ?? null
+          return returnSeason === null || returnSeason <= newSeason
         })
-        await tx.playerSeasonStats.createMany({
-          data: loanedPlayers.map((p) => ({
-            playerId: p.id,
-            clubStintId: currentStint.id,
-            season: data.currentSeason!,
-          })),
-          skipDuplicates: true,
-        })
+        const stillOnLoan = loanedPlayers.filter((p) => !returning.includes(p))
+
+        if (returning.length > 0) {
+          await tx.player.updateMany({
+            where: { id: { in: returning.map((p) => p.id) } },
+            data: { activeClubStintId: currentStint.id, status: PlayerStatus.Role },
+          })
+          await tx.playerSeasonStats.createMany({
+            data: returning.map((p) => ({
+              playerId: p.id,
+              clubStintId: currentStint.id,
+              season: newSeason,
+            })),
+            skipDuplicates: true,
+          })
+        }
+
+        // Players staying out another season get a fresh informational loan-spell
+        // stats row for the new season (#4.4 B-001) — never aggregated anywhere.
+        if (stillOnLoan.length > 0) {
+          await tx.loanSpellStats.createMany({
+            data: stillOnLoan.map((p) => ({
+              saveId,
+              playerId: p.id,
+              transferId: p.transfers?.[0]?.id ?? null,
+              loanClub: p.transfers?.[0]?.to ?? '',
+              season: newSeason,
+            })),
+            skipDuplicates: true,
+          })
+        }
       }
 
       if (data.budget !== undefined) {

@@ -1,7 +1,7 @@
 import { prisma } from '../../shared/lib/prisma.js'
 import { NotFoundError, AppError } from '../../shared/utils/errors.js'
 import { formatMarketValue, formatSalary, millions, thousands } from '../../shared/utils/currency.js'
-import { Position, PlayerStatus } from '@prisma/client'
+import { Position, PlayerStatus, TransferType } from '@prisma/client'
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library'
 import { cacheGet, cacheSet, cacheInvalidate, cacheInvalidatePattern } from '../../shared/utils/cache.js'
 import { createSnapshot, writeAudit } from '../saves/snapshots.service.js'
@@ -672,6 +672,135 @@ export async function releasePlayer(saveId: string, playerId: string, userId: st
   await invalidatePlayersCache(saveId)
 
   return formatPlayer(result)
+}
+
+/**
+ * Recalls a player who is out on loan (#4.2 F-002): ends the loan early and
+ * re-attaches him to the current club's squad mid-season, instead of waiting
+ * for the next season advance to auto-return him.
+ */
+export async function recallLoanedPlayer(saveId: string, playerId: string, userId: string) {
+  const [save, player] = await Promise.all([
+    prisma.save.findUnique({
+      where: { id: saveId },
+      include: { clubStints: { where: { isCurrent: true }, select: { id: true } } },
+    }),
+    prisma.player.findFirst({ where: { id: playerId, saveId } }),
+  ])
+  if (!save) throw new NotFoundError('Save não encontrado.')
+  if (!player) throw new NotFoundError('Jogador não encontrado neste save.')
+
+  const currentStint = save.clubStints[0]
+  if (!currentStint) throw new NotFoundError('Nenhum clube ativo encontrado para este save.')
+
+  // Must actually be out on loan from the current club.
+  if (player.status !== PlayerStatus.Loan || player.activeClubStintId !== null) {
+    throw new AppError(`O jogador '${player.name}' não está emprestado.`, 400)
+  }
+  const loanTransfer = await prisma.transfer.findFirst({
+    where: { saveId, playerId, type: TransferType.emprestimo_saida, clubStintId: currentStint.id },
+  })
+  if (!loanTransfer) {
+    throw new AppError(`O jogador '${player.name}' não foi emprestado pelo clube atual.`, 400)
+  }
+
+  // Recall = end the loan early and bring him back to the squad now. Age is NOT
+  // touched (it advances only on a season advance — decided 2026-06-19). After
+  // this, the season-advance loan-return pass naturally skips him (he is no
+  // longer status=Loan + activeClubStintId=null), so there is no double-return;
+  // explicit loan-end metadata on the Transfer comes with #4.4 B-002.
+  const result = await prisma.$transaction(async (tx) => {
+    await writeAudit(tx, {
+      userId,
+      saveId,
+      action: 'player.loan_recall',
+      meta: { playerId, playerName: player.name, loanTransferId: loanTransfer.id, toStintId: currentStint.id },
+    })
+    const updated = await tx.player.update({
+      where: { id: playerId },
+      data: { activeClubStintId: currentStint.id, status: PlayerStatus.Role },
+    })
+    // Ensure he can accrue stats for the remainder of the current season.
+    await tx.playerSeasonStats.createMany({
+      data: [{ playerId, clubStintId: currentStint.id, season: save.currentSeason }],
+      skipDuplicates: true,
+    })
+    return updated
+  })
+
+  await invalidatePlayersCache(saveId)
+
+  return formatPlayer(result)
+}
+
+/**
+ * Loan-spell stats (#4.4 B-001): goals/assists/matches a player recorded while OUT
+ * ON LOAN. Informational only — they live in their own table and are NEVER summed
+ * into career history, History-tab records/rankings, or club totals.
+ */
+export async function getLoanSpellStats(saveId: string, playerId: string) {
+  const cacheKey = `save:${saveId}:player:${playerId}:loan-stats`
+  const cached = await cacheGet<unknown>(cacheKey)
+  if (cached) return cached
+
+  const player = await prisma.player.findFirst({ where: { id: playerId, saveId }, select: { id: true } })
+  if (!player) throw new NotFoundError('Jogador não encontrado neste save.')
+
+  const rows = await prisma.loanSpellStats.findMany({
+    where: { saveId, playerId },
+    orderBy: { season: 'asc' },
+  })
+  const result = rows.map((r) => ({ ...r, goalContributions: r.goals + r.assists }))
+  await cacheSet(cacheKey, result, TTL.player)
+  return result
+}
+
+/** Upserts the current loan season's stats. Only allowed while the player is out on loan. */
+export async function upsertLoanSpellStats(
+  saveId: string,
+  playerId: string,
+  data: { goals?: number; assists?: number; matches?: number }
+) {
+  const [save, player] = await Promise.all([
+    prisma.save.findUnique({
+      where: { id: saveId },
+      include: { clubStints: { where: { isCurrent: true }, select: { id: true } } },
+    }),
+    prisma.player.findFirst({ where: { id: playerId, saveId } }),
+  ])
+  if (!save) throw new NotFoundError('Save não encontrado.')
+  if (!player) throw new NotFoundError('Jogador não encontrado neste save.')
+
+  const currentStint = save.clubStints[0]
+  if (!currentStint) throw new NotFoundError('Nenhum clube ativo encontrado para este save.')
+
+  if (player.status !== PlayerStatus.Loan || player.activeClubStintId !== null) {
+    throw new AppError(`O jogador '${player.name}' não está emprestado; estatísticas de empréstimo só podem ser editadas enquanto ele está cedido.`, 400)
+  }
+  const loanTransfer = await prisma.transfer.findFirst({
+    where: { saveId, playerId, type: TransferType.emprestimo_saida, clubStintId: currentStint.id },
+    orderBy: { createdAt: 'desc' },
+    select: { id: true, to: true },
+  })
+  if (!loanTransfer) {
+    throw new AppError(`O jogador '${player.name}' não foi emprestado pelo clube atual.`, 400)
+  }
+
+  const row = await prisma.loanSpellStats.upsert({
+    where: { playerId_season: { playerId, season: save.currentSeason } },
+    create: {
+      saveId,
+      playerId,
+      transferId: loanTransfer.id,
+      loanClub: loanTransfer.to,
+      season: save.currentSeason,
+      ...data,
+    },
+    update: data,
+  })
+
+  await cacheInvalidate(`save:${saveId}:player:${playerId}:loan-stats`)
+  return { ...row, goalContributions: row.goals + row.assists }
 }
 
 /**

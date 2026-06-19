@@ -152,6 +152,27 @@ const playerStatsResponse = {
   },
 }
 
+const loanSpellStatsProperties = {
+  id: { type: 'string' },
+  saveId: { type: 'string' },
+  playerId: { type: 'string' },
+  transferId: nullableStr,
+  loanClub: { type: 'string' },
+  season: { type: 'string' },
+  goals: { type: 'integer' },
+  assists: { type: 'integer' },
+  matches: { type: 'integer' },
+  goalContributions: { type: 'integer' },
+  createdAt: { type: 'string', format: 'date-time' },
+  updatedAt: { type: 'string', format: 'date-time' },
+}
+
+const loanSpellStatsResponse = {
+  type: 'object',
+  additionalProperties: false,
+  properties: loanSpellStatsProperties,
+}
+
 const importResponse = {
   type: 'object',
   additionalProperties: false,
@@ -409,5 +430,88 @@ export async function playersRoutes(app: FastifyInstance) {
       },
     },
     playersController.releasePlayer
+  )
+
+  app.post<{ Params: { saveId: string; playerId: string } }>(
+    '/saves/:saveId/players/:playerId/recall',
+    {
+      schema: {
+        tags: ['Players'],
+        summary: 'Recall de jogador emprestado',
+        description: 'Encerra o empréstimo antecipadamente e reanexa o jogador ao elenco do clube atual (status `Role`), sem esperar o próximo avanço de temporada. Não altera a idade (idade avança só no season advance). Garante o PlayerSeasonStats da temporada atual. Erro 400 se o jogador não estiver emprestado pelo clube atual.',
+        params: {
+          type: 'object',
+          properties: {
+            saveId: { type: 'string' },
+            playerId: { type: 'string' },
+          },
+        },
+        response: {
+          200: playerResponse,
+          400: errorResponse,
+          404: errorResponse,
+        },
+      },
+    },
+    playersController.recallPlayer
+  )
+
+  app.get<{ Params: { saveId: string; playerId: string } }>(
+    '/saves/:saveId/players/:playerId/loan-stats',
+    {
+      schema: {
+        tags: ['Players'],
+        summary: 'Estatísticas do jogador durante empréstimos',
+        description: 'Lista as estatísticas informativas (gols/assistências/jogos) que o jogador registrou enquanto emprestado, por temporada. Estes números NUNCA entram no histórico de carreira, nos records/rankings da aba History, nem nos totais do clube — são apenas para acompanhar a forma do jogador cedido.',
+        params: {
+          type: 'object',
+          properties: {
+            saveId: { type: 'string' },
+            playerId: { type: 'string' },
+          },
+        },
+        response: {
+          200: { type: 'array', items: loanSpellStatsResponse },
+          404: errorResponse,
+        },
+      },
+    },
+    playersController.getLoanSpellStats
+  )
+
+  app.patch<{
+    Params: { saveId: string; playerId: string }
+    Body: { goals?: number; assists?: number; matches?: number }
+  }>(
+    '/saves/:saveId/players/:playerId/loan-stats',
+    {
+      schema: {
+        tags: ['Players'],
+        summary: 'Editar stats do empréstimo (temporada atual)',
+        description: 'Faz upsert das estatísticas de empréstimo da temporada atual. Só permitido enquanto o jogador está cedido (status `Loan`, fora do elenco). Estes números são informativos e não agregam em nada (#4.4 B-001).',
+        params: {
+          type: 'object',
+          properties: {
+            saveId: { type: 'string' },
+            playerId: { type: 'string' },
+          },
+        },
+        body: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            goals: { type: 'integer', minimum: 0, example: 7 },
+            assists: { type: 'integer', minimum: 0, example: 4 },
+            matches: { type: 'integer', minimum: 0, example: 20 },
+          },
+        },
+        response: {
+          200: loanSpellStatsResponse,
+          400: errorResponse,
+          404: errorResponse,
+        },
+      },
+    },
+    playersController.updateLoanSpellStats
   )
 }

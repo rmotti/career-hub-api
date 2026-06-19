@@ -9,6 +9,7 @@ const txMock = {
   player: { findMany: vi.fn(), updateMany: vi.fn() },
   playerOvrHistory: { createMany: vi.fn() },
   playerSeasonStats: { createMany: vi.fn() },
+  loanSpellStats: { createMany: vi.fn() },
 }
 
 vi.mock('../../../shared/lib/prisma.js', () => ({
@@ -250,9 +251,16 @@ describe('updateSave — season advance', () => {
       data: [{ playerId: 'p1', season: '2025/26', ovr: 80, marketValue: 50 }],
       skipDuplicates: true,
     }))
-    // envelhece o elenco ativo (age < 45)
+    // envelhece o elenco ativo + emprestados (age < 45). Sem emprestados aqui → IN vazio.
     expect(txMock.player.updateMany).toHaveBeenCalledWith({
-      where: { saveId: SAVE_ID, activeClubStintId: STINT_ID, age: { lt: 45 } },
+      where: {
+        saveId: SAVE_ID,
+        age: { lt: 45 },
+        OR: [
+          { activeClubStintId: STINT_ID },
+          { id: { in: [] } },
+        ],
+      },
       data: { age: { increment: 1 } },
     })
     // TeamSeasonStats da nova temporada
@@ -299,20 +307,67 @@ describe('updateSave — season advance', () => {
     })
   })
 
-  it('returns loaned-out players to the squad on advance', async () => {
+  it('returns loaned-out players to the squad on advance, and ages them (C-001)', async () => {
     mockSaveForUpdate()
     mockedFindLeague.mockReturnValue(null)
     txMock.teamSeasonStats.findMany.mockResolvedValue([])
     txMock.player.findMany
       .mockResolvedValueOnce([]) // activePlayers
-      .mockResolvedValueOnce([{ id: 'loaned-1' }]) // loanedPlayers de volta
+      // loanedPlayer cujo returnSeason já chegou (null = empréstimo legado de 1 temporada)
+      .mockResolvedValueOnce([{ id: 'loaned-1', transfers: [{ id: 'tr-1', to: 'Loan FC', returnSeason: null }] }])
     txMock.save.update.mockResolvedValue({ id: SAVE_ID, userId: 'owner', name: 'S', currentYear: 2026, currentSeason: '2026/27', budget: 200, balance: 150, createdAt: new Date(), updatedAt: new Date() })
 
     await updateSave(SAVE_ID, { currentSeason: '2026/27' }, 'owner')
 
+    // C-001: the loaned-out player is included in the aging pass (matched by id,
+    // since his activeClubStintId is null while away). Regression guard for the
+    // bug where loaned players never aged.
+    expect(txMock.player.updateMany).toHaveBeenCalledWith({
+      where: {
+        saveId: SAVE_ID,
+        age: { lt: 45 },
+        OR: [
+          { activeClubStintId: STINT_ID },
+          { id: { in: ['loaned-1'] } },
+        ],
+      },
+      data: { age: { increment: 1 } },
+    })
+    // ...and is then re-attached to the squad (returnSeason reached).
     expect(txMock.player.updateMany).toHaveBeenCalledWith({
       where: { id: { in: ['loaned-1'] } },
       data: { activeClubStintId: STINT_ID, status: PlayerStatus.Role },
+    })
+    // single-season loan → nothing stays out, so no new loan-spell stats row
+    expect(txMock.loanSpellStats.createMany).not.toHaveBeenCalled()
+  })
+
+  it('keeps a 2-season loanee out (B-002): no re-attach, ages him, opens a new loan-spell stats row', async () => {
+    mockSaveForUpdate()
+    mockedFindLeague.mockReturnValue(null)
+    txMock.teamSeasonStats.findMany.mockResolvedValue([])
+    txMock.player.findMany
+      .mockResolvedValueOnce([]) // activePlayers
+      // returnSeason 2027/28 ainda não alcançado ao avançar para 2026/27 → continua emprestado
+      .mockResolvedValueOnce([{ id: 'loaned-2', transfers: [{ id: 'tr-2', to: 'Loan FC', returnSeason: '2027/28' }] }])
+    txMock.save.update.mockResolvedValue({ id: SAVE_ID, userId: 'owner', name: 'S', currentYear: 2026, currentSeason: '2026/27', budget: 200, balance: 150, createdAt: new Date(), updatedAt: new Date() })
+
+    await updateSave(SAVE_ID, { currentSeason: '2026/27' }, 'owner')
+
+    // ainda envelhece (C-001), por id
+    expect(txMock.player.updateMany).toHaveBeenCalledWith({
+      where: { saveId: SAVE_ID, age: { lt: 45 }, OR: [{ activeClubStintId: STINT_ID }, { id: { in: ['loaned-2'] } }] },
+      data: { age: { increment: 1 } },
+    })
+    // NÃO reanexa (nenhum updateMany de retorno com o id dele)
+    expect(txMock.player.updateMany).not.toHaveBeenCalledWith({
+      where: { id: { in: ['loaned-2'] } },
+      data: { activeClubStintId: STINT_ID, status: PlayerStatus.Role },
+    })
+    // abre uma LoanSpellStats informativa para a nova temporada
+    expect(txMock.loanSpellStats.createMany).toHaveBeenCalledWith({
+      data: [{ saveId: SAVE_ID, playerId: 'loaned-2', transferId: 'tr-2', loanClub: 'Loan FC', season: '2026/27' }],
+      skipDuplicates: true,
     })
   })
 })

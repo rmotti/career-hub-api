@@ -13,6 +13,12 @@ const SEASON_PATTERN = /^\d{4}\/\d{2}$/
 const COMPRA_TYPES: TransferType[] = [TransferType.compra, TransferType.emprestimo_entrada]
 const VENDA_TYPES: TransferType[]  = [TransferType.venda,  TransferType.emprestimo_saida]
 
+/** Adds N seasons to a "YYYY/YY" season string (e.g. addSeasons('2025/26', 2) === '2027/28'). */
+function addSeasons(season: string, n: number): string {
+  const startYear = parseInt(season.slice(0, 4), 10) + n
+  return `${startYear}/${String((startYear + 1) % 100).padStart(2, '0')}`
+}
+
 function formatSaveResponse(save: { id: string; balance: number | null; budget: number | null; currentSeason: string; currentYear: number }) {
   return {
     id: save.id,
@@ -85,6 +91,7 @@ export async function createTransfer(
     fee?: number
     season: string
     playerId?: string
+    loanSeasons?: number
   }
 ) {
   if (!data.from || !data.to) {
@@ -93,6 +100,10 @@ export async function createTransfer(
 
   if (!SEASON_PATTERN.test(data.season)) {
     throw new AppError('Formato de temporada inválido. Use o formato YYYY/YY (ex: 2028/29).', 400)
+  }
+
+  if (data.type === TransferType.emprestimo_saida && data.loanSeasons !== undefined && ![1, 2].includes(data.loanSeasons)) {
+    throw new AppError('Empréstimo de saída suporta duração de 1 ou 2 temporadas (loanSeasons).', 400)
   }
 
   const save = await prisma.save.findUnique({
@@ -162,6 +173,11 @@ export async function createTransfer(
       }
     }
 
+    // Loan duration (#4.4 B-002): a loaned-out player auto-returns once this season
+    // is reached on a season advance. Default 1 season; null for non-loan transfers.
+    const loanReturnSeason =
+      data.type === TransferType.emprestimo_saida ? addSeasons(data.season, data.loanSeasons ?? 1) : null
+
     // Create transfer with the resolved playerId
     const newTransfer = await tx.transfer.create({
       data: {
@@ -174,6 +190,7 @@ export async function createTransfer(
         fee: data.fee,
         season: data.season,
         playerId: resolvedPlayerId,
+        returnSeason: loanReturnSeason,
       },
     })
 
@@ -184,6 +201,20 @@ export async function createTransfer(
         data: {
           activeClubStintId: null,
           ...(data.type === TransferType.emprestimo_saida && { status: PlayerStatus.Loan }),
+        },
+      })
+    }
+
+    // Loan-out: open an informational loan-spell stats row for this season (#4.4 B-001).
+    // These numbers are editable but never aggregate into history/records/club totals.
+    if (data.type === TransferType.emprestimo_saida && resolvedPlayerId) {
+      await tx.loanSpellStats.create({
+        data: {
+          saveId,
+          playerId: resolvedPlayerId,
+          transferId: newTransfer.id,
+          loanClub: data.to,
+          season: data.season,
         },
       })
     }
