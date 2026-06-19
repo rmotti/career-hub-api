@@ -24,6 +24,7 @@ model User {
   accounts      Account[]
   saves         Save[]
   sessions      Session[]
+  conversations ChatConversation[]
 }
 
 model Session {
@@ -85,6 +86,7 @@ model Save {
   savedSearches SavedSearch[]
   snapshots     SaveSnapshot[]
   loanSpellStats LoanSpellStats[]
+  conversations ChatConversation[]
 
   @@index([userId, deletedAt])
 }
@@ -496,4 +498,36 @@ enum CompetitionType {
   NationalCup
   SuperCup
   EuropeanCup
+}
+
+enum ChatRole {
+  user
+  assistant
+}
+
+model ChatConversation {
+  id        String        @id @default(uuid())
+  userId    String
+  saveId    String?
+  title     String?
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  save      Save?         @relation(fields: [saveId], references: [id], onDelete: SetNull)
+  messages  ChatMessage[]
+
+  @@index([userId])
+  @@index([saveId])
+}
+
+model ChatMessage {
+  id               String           @id @default(uuid())
+  conversationId   String
+  role             ChatRole
+  content          String
+  openaiResponseId String?
+  createdAt        DateTime         @default(now())
+  conversation     ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
 }
