@@ -9,8 +9,8 @@ const txMock = {
 vi.mock('../../../shared/lib/prisma.js', () => ({
   prisma: {
     save: { findUnique: vi.fn() },
-    player: { findFirst: vi.fn(), update: vi.fn() },
-    playerSeasonStats: { update: vi.fn() },
+    player: { findFirst: vi.fn(), findMany: vi.fn(), update: vi.fn() },
+    playerSeasonStats: { update: vi.fn(), findMany: vi.fn(), groupBy: vi.fn() },
     transfer: { findFirst: vi.fn() },
     loanSpellStats: { findMany: vi.fn(), upsert: vi.fn() },
     $transaction: vi.fn(async (cb: (tx: typeof txMock) => unknown) => cb(txMock)),
@@ -30,16 +30,19 @@ vi.mock('../../saves/snapshots.service.js', () => ({
 }))
 
 import { prisma } from '../../../shared/lib/prisma.js'
+import { cacheGet } from '../../../shared/utils/cache.js'
 import { writeAudit } from '../../saves/snapshots.service.js'
-import { createPlayer, updatePlayer, recallLoanedPlayer, getLoanSpellStats, upsertLoanSpellStats, getPlayerById } from '../players.service.js'
+import { createPlayer, updatePlayer, recallLoanedPlayer, getLoanSpellStats, upsertLoanSpellStats, getPlayerById, listPlayers } from '../players.service.js'
 
 const mockedPrisma = prisma as unknown as {
   save: { findUnique: ReturnType<typeof vi.fn> }
-  player: { findFirst: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn> }
+  player: { findFirst: ReturnType<typeof vi.fn>; findMany: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn> }
+  playerSeasonStats: { findMany: ReturnType<typeof vi.fn>; groupBy: ReturnType<typeof vi.fn> }
   transfer: { findFirst: ReturnType<typeof vi.fn> }
   loanSpellStats: { findMany: ReturnType<typeof vi.fn>; upsert: ReturnType<typeof vi.fn> }
   $transaction: ReturnType<typeof vi.fn>
 }
+const mockedCacheGet = cacheGet as unknown as ReturnType<typeof vi.fn>
 const mockedWriteAudit = writeAudit as unknown as ReturnType<typeof vi.fn>
 
 const SAVE_ID = 'save-1'
@@ -353,5 +356,44 @@ describe('getPlayerById — per-season history (F-004)', () => {
     expect(result.loanSpells).toHaveLength(1)
     expect(result.loanSpells[0]).toMatchObject({ season: '2024/25', loanClub: 'Loan FC', goalContributions: 5 })
     expect(result.seasons.some(s => s.season === '2024/25')).toBe(false)
+  })
+})
+
+describe('listPlayers — ranking clubs (F-003)', () => {
+  type RankedPlayer = { id: string; clubs: string[]; totalStats: { goals: number } }
+
+  beforeEach(() => {
+    mockedCacheGet.mockResolvedValue(null) // force fetchPlayers (skip cache hit)
+    // default list variant: current stint resolution + the three parallel queries
+    mockedPrisma.save.findUnique.mockResolvedValue({
+      currentSeason: '2027/28',
+      clubStints: [{ id: STINT_ID, club: 'Club A' }],
+    })
+    mockedPrisma.playerSeasonStats.groupBy.mockResolvedValue([])
+  })
+
+  it('returns the distinct clubs each player featured for, in first-appearance order', async () => {
+    mockedPrisma.player.findMany.mockResolvedValue([
+      { id: 'p-multi', marketValue: null, salary: null },
+      { id: 'p-repeat', marketValue: null, salary: null },
+      { id: 'p-none', marketValue: null, salary: null },
+    ])
+    // ordered by season asc (then createdAt) — as the real query returns them
+    mockedPrisma.playerSeasonStats.findMany.mockResolvedValue([
+      { playerId: 'p-multi', clubStint: { club: 'Arsenal' } },   // 2025/26
+      { playerId: 'p-repeat', clubStint: { club: 'Chelsea' } },  // 2025/26
+      { playerId: 'p-multi', clubStint: { club: 'Chelsea' } },   // 2026/27 (club change)
+      { playerId: 'p-repeat', clubStint: { club: 'Chelsea' } },  // 2026/27 (same club again)
+    ])
+
+    const result = (await listPlayers(SAVE_ID)) as RankedPlayer[]
+    const byId = new Map(result.map((p) => [p.id, p]))
+
+    // two distinct clubs, chronological order preserved
+    expect(byId.get('p-multi')!.clubs).toEqual(['Arsenal', 'Chelsea'])
+    // same club across two seasons collapses to a single entry
+    expect(byId.get('p-repeat')!.clubs).toEqual(['Chelsea'])
+    // player with no season stats has an empty clubs list
+    expect(byId.get('p-none')!.clubs).toEqual([])
   })
 })

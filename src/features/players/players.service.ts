@@ -138,7 +138,7 @@ async function fetchPlayers(saveId: string, activeOnly?: boolean, season?: strin
     }))
   }
 
-  const [players, statsTotals] = await Promise.all([
+  const [players, statsTotals, stintRows] = await Promise.all([
     prisma.player.findMany({
       where: { saveId },
       orderBy: { createdAt: 'asc' },
@@ -155,9 +155,26 @@ async function fetchPlayers(saveId: string, activeOnly?: boolean, season?: strin
         cleanSheets: true,
       },
     }),
+    // F-003: the clubs each player featured for across the save, derived from
+    // PlayerSeasonStats.clubStint.club. Ordered by season (then createdAt for a
+    // mid-season club change) so the JS dedup below yields first-appearance order.
+    prisma.playerSeasonStats.findMany({
+      where: { player: { saveId } },
+      select: { playerId: true, clubStint: { select: { club: true } } },
+      orderBy: [{ season: 'asc' }, { createdAt: 'asc' }],
+    }),
   ])
 
   const totalsMap = new Map(statsTotals.map((s) => [s.playerId, s._sum]))
+
+  // Distinct clubs per player, preserving first-appearance order (same club across
+  // multiple stints/seasons collapses to a single entry).
+  const clubsMap = new Map<string, string[]>()
+  for (const row of stintRows) {
+    const clubs = clubsMap.get(row.playerId) ?? []
+    if (!clubs.includes(row.clubStint.club)) clubs.push(row.clubStint.club)
+    clubsMap.set(row.playerId, clubs)
+  }
 
   return players.map((p) => {
     const t = totalsMap.get(p.id)
@@ -174,6 +191,7 @@ async function fetchPlayers(saveId: string, activeOnly?: boolean, season?: strin
         cleanSheets: t?.cleanSheets ?? 0,
         goalContributions: goals + assists,
       },
+      clubs: clubsMap.get(p.id) ?? [],
     }
   })
 }

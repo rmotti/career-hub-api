@@ -100,6 +100,9 @@ const playerListItemResponse = {
   properties: {
     ...playerProperties,
     totalStats: { type: 'object', additionalProperties: false, properties: seasonStatsProperties },
+    // F-003: clubs the player featured for across the save (default list variant only,
+    // powers the History ranking). Distinct club names in first-appearance order.
+    clubs: { type: 'array', items: { type: 'string' } },
     currentSeasonStats: currentSeasonStatsResponse,
     ovrDelta: nullableInt,
     marketValueDelta: nullableNum,
@@ -233,7 +236,7 @@ export async function playersRoutes(app: FastifyInstance) {
     schema: {
       tags: ['Players'],
       summary: 'Listar jogadores',
-      description: 'Sem query param: todos os jogadores com `totalStats`. Com `?active=true`: elenco ativo com stats da temporada atual + `ovrDelta`. Com `?active=true&season=2027/28`: elenco ativo naquela temporada. Com `?loaned=true`: jogadores emprestados pelo clube atual, com `loanedTo` e `loanSeason`.',
+      description: 'Sem query param: todos os jogadores com `totalStats` e `clubs` (clubes pelos quais atuou no save, em ordem de primeira aparição — alimenta o ranking da aba History). Com `?active=true`: elenco ativo com stats da temporada atual + `ovrDelta`. Com `?active=true&season=2027/28`: elenco ativo naquela temporada. Com `?loaned=true`: jogadores emprestados pelo clube atual, com `loanedTo` e `loanSeason`.',
       params: {
         type: 'object',
         properties: {
