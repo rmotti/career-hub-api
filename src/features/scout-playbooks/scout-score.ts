@@ -22,11 +22,30 @@ const COMPONENT_LABEL: Record<ScoutScoreComponent, string> = {
   wage: 'Salário',
 }
 
-const DEFAULT_OBJECTIVE_AGE_RANGE: Record<string, { min: number; max: number }> = {
-  balanced: { min: 21, max: 29 },
-  title: { min: 24, max: 31 },
-  youth: { min: 16, max: 23 },
-  rebuild: { min: 18, max: 25 },
+// B-003 scoring calibration — fixed scales (not relative to the candidate list) so a score
+// means the same thing in every search. See docs/04_Next_Steps/4.4 B-003.
+const OVR_FLOOR = 50
+const OVR_CEIL = 95
+const POTENTIAL_UPSIDE_DELTA = 20
+
+// Age decays from 100 at AGE_ANCHOR with an accelerating per-year penalty.
+const AGE_ANCHOR = 16
+const AGE_BANDS: Array<{ upTo: number; k: number }> = [
+  { upTo: 20, k: 2 },
+  { upTo: 25, k: 3 },
+  { upTo: 33, k: 5 },
+  { upTo: Infinity, k: 7 },
+]
+
+/**
+ * Budget references for the cost components, resolved per evaluation by the service:
+ * - `marketValueRef`: the playbook/filter cap, else the save's transfer budget.
+ * - `wageRef`: the `maxWage` cap only (no domain wage budget) — absent ⇒ wage is unavailable.
+ * A null/undefined/≤0 reference marks the matching cost component unavailable (it drops).
+ */
+export interface ScoutScoreContext {
+  marketValueRef?: number | null
+  wageRef?: number | null
 }
 
 export function resolveInlinePlaybook(playbook?: ScoutPlaybookInput | null): ResolvedScoutPlaybook {
@@ -60,18 +79,9 @@ export function normalizePreferences(preferences?: ScoutPlaybookPreferences | nu
     : DEFAULT_SCOUT_PLAYBOOK.preferences.objective
 
   const normalized: ScoutPlaybookPreferences = { objective }
-  const idealAgeMin = normalizeNumber(raw.idealAgeMin)
-  const idealAgeMax = normalizeNumber(raw.idealAgeMax)
   const maxMarketValue = normalizePositiveNumber(raw.maxMarketValue)
   const maxWage = normalizePositiveNumber(raw.maxWage)
 
-  if (idealAgeMin !== undefined) normalized.idealAgeMin = clamp(idealAgeMin, 15, 45)
-  if (idealAgeMax !== undefined) normalized.idealAgeMax = clamp(idealAgeMax, 15, 45)
-  if (normalized.idealAgeMin !== undefined && normalized.idealAgeMax !== undefined && normalized.idealAgeMin > normalized.idealAgeMax) {
-    const min = normalized.idealAgeMax
-    normalized.idealAgeMax = normalized.idealAgeMin
-    normalized.idealAgeMin = min
-  }
   if (maxMarketValue !== undefined) normalized.maxMarketValue = maxMarketValue
   if (maxWage !== undefined) normalized.maxWage = maxWage
 
@@ -80,11 +90,12 @@ export function normalizePreferences(preferences?: ScoutPlaybookPreferences | nu
 
 export function calculateScoutScore(
   player: Fc26PlayerWithFitScore,
-  playbook: ResolvedScoutPlaybook
+  playbook: ResolvedScoutPlaybook,
+  context: ScoutScoreContext = {}
 ): ScoutScoreResult {
   const breakdown = (Object.entries(playbook.weights) as Array<[ScoutScoreComponent, number]>)
     .filter(([, weight]) => weight > 0)
-    .map(([key, weight]) => calculateComponent(player, key, weight, playbook.preferences))
+    .map(([key, weight]) => calculateComponent(player, key, weight, context))
 
   const available = breakdown.filter((item) => item.available && item.score !== null && item.weight > 0)
   const totalWeight = available.reduce((sum, item) => sum + item.weight, 0)
@@ -114,7 +125,7 @@ function calculateComponent(
   player: Fc26PlayerWithFitScore,
   key: ScoutScoreComponent,
   weight: number,
-  preferences: ScoutPlaybookPreferences
+  context: ScoutScoreContext
 ): ScoutScoreBreakdownItem {
   const base = {
     key,
@@ -124,24 +135,26 @@ function calculateComponent(
   }
 
   if (key === 'overall') {
-    return { ...base, score: clampScore(player.ovr), value: player.ovr, available: true }
+    return { ...base, score: scoreLevel(player.ovr), value: player.ovr, available: true }
   }
 
   if (key === 'potential') {
-    return { ...base, score: clampScore(player.potential), value: player.potential, available: true }
+    return { ...base, score: scorePotentialUpside(player.potential, player.ovr), value: player.potential, available: true }
   }
 
   if (key === 'age') {
-    return { ...base, score: scoreAge(player.age, preferences), value: player.age, available: true }
+    return { ...base, score: scoreAge(player.age), value: player.age, available: true }
   }
 
   if (key === 'historicalFit') {
+    // No profile for this club/position ⇒ score 0 (not dropped), so the weight stays in the
+    // denominator and rankings remain comparable across players (B-003 #3).
     if (typeof player.fitScore !== 'number' || !Number.isFinite(player.fitScore) || player.fitConfidence === 'none') {
       return {
         ...base,
-        score: null,
+        score: 0,
         value: null,
-        available: false,
+        available: true,
         confidence: player.fitConfidence,
         profileSize: player.fitProfileSize,
         reason: 'Sem perfil histórico disponível para clube/posição.',
@@ -162,46 +175,54 @@ function calculateComponent(
     if (typeof player.marketValue !== 'number' || !Number.isFinite(player.marketValue)) {
       return { ...base, score: null, value: null, available: false, reason: 'Valor de mercado indisponível.' }
     }
-
-    return {
-      ...base,
-      score: scoreBudget(player.marketValue, preferences.maxMarketValue),
-      value: player.marketValue,
-      available: true,
+    const ref = context.marketValueRef
+    if (typeof ref !== 'number' || !Number.isFinite(ref) || ref <= 0) {
+      return { ...base, score: null, value: player.marketValue, available: false, reason: 'Sem orçamento de referência para valor de mercado.' }
     }
+    return { ...base, score: scoreBudget(player.marketValue, ref), value: player.marketValue, available: true }
   }
 
+  // wage — opt-in: only scored when a `maxWage` reference exists (B-003 #1).
   if (typeof player.wage !== 'number' || !Number.isFinite(player.wage)) {
     return { ...base, score: null, value: null, available: false, reason: 'Salário indisponível.' }
   }
-
-  return {
-    ...base,
-    score: scoreBudget(player.wage, preferences.maxWage),
-    value: player.wage,
-    available: true,
+  const wageRef = context.wageRef
+  if (typeof wageRef !== 'number' || !Number.isFinite(wageRef) || wageRef <= 0) {
+    return { ...base, score: null, value: player.wage, available: false, reason: 'Defina um salário máximo (maxWage) para avaliar o salário.' }
   }
+  return { ...base, score: scoreBudget(player.wage, wageRef), value: player.wage, available: true }
 }
 
-function scoreAge(age: number, preferences: ScoutPlaybookPreferences): number {
-  const objective = preferences.objective ?? DEFAULT_SCOUT_PLAYBOOK.preferences.objective ?? 'balanced'
-  const defaults = DEFAULT_OBJECTIVE_AGE_RANGE[objective] ?? DEFAULT_OBJECTIVE_AGE_RANGE.balanced
-  const min = preferences.idealAgeMin ?? defaults.min
-  const max = preferences.idealAgeMax ?? defaults.max
-
-  if (age >= min && age <= max) return 100
-
-  const distance = age < min ? min - age : age - max
-  return clampScore(100 - (distance * 8))
+// Overall: fixed linear map OVR 50→0, 95→100 (B-003 #5).
+function scoreLevel(ovr: number): number {
+  return clampScore(((ovr - OVR_FLOOR) / (OVR_CEIL - OVR_FLOOR)) * 100)
 }
 
-function scoreBudget(value: number, maxValue?: number): number {
-  if (typeof maxValue === 'number' && Number.isFinite(maxValue) && maxValue > 0) {
-    if (value <= maxValue) return 100
-    return clampScore(100 - (((value - maxValue) / maxValue) * 100))
-  }
+// Potential: upside = headroom (potential − ovr) over DELTA, clamped (B-003 #4).
+function scorePotentialUpside(potential: number, ovr: number): number {
+  return clampScore(((potential - ovr) / POTENTIAL_UPSIDE_DELTA) * 100)
+}
 
-  return clampScore(100 - (Math.log10(Math.max(value, 0) + 1) * 22))
+// Age: 100 at AGE_ANCHOR, accelerating per-year penalty by band (B-003 #2).
+function scoreAge(age: number): number {
+  if (age <= AGE_ANCHOR) return 100
+  let penalty = 0
+  for (let a = AGE_ANCHOR + 1; a <= age; a++) {
+    penalty += agePenaltyForYear(a)
+  }
+  return clampScore(100 - penalty)
+}
+
+function agePenaltyForYear(age: number): number {
+  for (const band of AGE_BANDS) {
+    if (age <= band.upTo) return band.k
+  }
+  return AGE_BANDS[AGE_BANDS.length - 1].k
+}
+
+// Budget-relative "headroom": cheaper = higher; at the reference = 0; free = 100 (B-003 #1).
+function scoreBudget(value: number, reference: number): number {
+  return clampScore(100 * (1 - value / reference))
 }
 
 function inferScoreConfidence(breakdown: ScoutScoreBreakdownItem[]): ScoutScoreResult['scoutScoreConfidence'] {
@@ -225,10 +246,6 @@ function normalizeNumber(value: unknown): number | undefined {
 function normalizePositiveNumber(value: unknown): number | undefined {
   const number = normalizeNumber(value)
   return number !== undefined && number > 0 ? number : undefined
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(Math.max(value, min), max)
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

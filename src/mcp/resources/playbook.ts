@@ -22,9 +22,6 @@ function renderPreferences(prefs: ScoutPlaybookPreferences | null): string {
   if (!prefs) return '_Sem preferências configuradas._'
   const lines: string[] = []
   if (prefs.objective) lines.push(`- **Objetivo:** ${prefs.objective}`)
-  if (prefs.idealAgeMin !== undefined || prefs.idealAgeMax !== undefined) {
-    lines.push(`- **Faixa etária ideal:** ${prefs.idealAgeMin ?? '?'}–${prefs.idealAgeMax ?? '?'}`)
-  }
   if (prefs.maxMarketValue !== undefined) {
     lines.push(`- **Valor de mercado máximo:** ${formatBalance(millions(prefs.maxMarketValue))}`)
   }

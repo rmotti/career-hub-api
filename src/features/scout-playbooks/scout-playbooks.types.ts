@@ -28,8 +28,6 @@ export type ScoutPlaybookWeights = Partial<Record<ScoutScoreComponent, number>>
 
 export interface ScoutPlaybookPreferences {
   objective?: ScoutFitObjective
-  idealAgeMin?: number
-  idealAgeMax?: number
   maxMarketValue?: number
   maxWage?: number
 }
@@ -80,10 +78,11 @@ export const DEFAULT_SCOUT_PLAYBOOK: ResolvedScoutPlaybook = {
   id: null,
   name: 'Equilibrado',
   weights: {
-    overall: 35,
-    age: 20,
-    historicalFit: 25,
-    potential: 20,
+    overall: 30,
+    potential: 15,
+    age: 15,
+    historicalFit: 15,
+    marketValue: 25,
   },
   preferences: {
     objective: 'balanced',

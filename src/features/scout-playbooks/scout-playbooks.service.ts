@@ -3,7 +3,7 @@ import { prisma } from '../../shared/lib/prisma.js'
 import { AppError, NotFoundError } from '../../shared/utils/errors.js'
 import { assertSaveAccess } from '../../shared/utils/save-access.js'
 import { listFc26Players, type Fc26PlayerFilters, type Fc26PlayerWithFitScore } from '../fc26-players/fc26-players.service.js'
-import { calculateScoutScore, normalizePreferences, normalizeWeights, resolveInlinePlaybook } from './scout-score.js'
+import { calculateScoutScore, normalizePreferences, normalizeWeights, resolveInlinePlaybook, type ScoutScoreContext } from './scout-score.js'
 import {
   DEFAULT_SCOUT_PLAYBOOK,
   ResolvedScoutPlaybook,
@@ -122,17 +122,32 @@ export async function evaluateScoutPlayers(input: ScoutEvaluateInput, userId: st
   const playbook = await resolveEvaluationPlaybook(input, userId)
   const objective = playbook.preferences.objective ?? input.filters?.objective ?? DEFAULT_SCOUT_PLAYBOOK.preferences.objective
 
+  // Transfer budget drives the marketValue gradient when no explicit cap is set (B-003 #1).
+  const save = await prisma.save.findUnique({ where: { id: input.saveId }, select: { budget: true } })
+  const saveBudget = save?.budget ?? null
+
+  // Explicit caps are a HARD filter (over-cap players excluded from the list) AND the gradient
+  // reference: marketValue falls back to the save budget; wage has no fallback (opt-in).
+  const marketCap = minDefined(input.filters?.maxMarketValue, playbook.preferences.maxMarketValue)
+  const wageCap = playbook.preferences.maxWage
+  const context: ScoutScoreContext = {
+    marketValueRef: marketCap ?? saveBudget,
+    wageRef: wageCap ?? null,
+  }
+
   const result = await listFc26Players({
     ...(input.filters ?? {}),
     saveId: input.saveId,
     objective,
+    ...(marketCap !== undefined ? { maxMarketValue: marketCap } : {}),
+    ...(wageCap !== undefined ? { maxWage: wageCap } : {}),
   })
 
   const players = result.players.map((player) => {
     const playerWithFit = normalizePlayerFitFields(player as Partial<Fc26PlayerWithFitScore>)
     return {
       ...player,
-      ...calculateScoutScore(playerWithFit, playbook),
+      ...calculateScoutScore(playerWithFit, playbook, context),
     }
   }).sort((a, b) => {
     if (a.scoutScore === null) return 1
@@ -231,6 +246,11 @@ function mapPlaybook(playbook: NonNullable<ScoutPlaybookRecord>) {
     createdAt: playbook.createdAt,
     updatedAt: playbook.updatedAt,
   }
+}
+
+function minDefined(...values: Array<number | undefined>): number | undefined {
+  const defined = values.filter((v): v is number => typeof v === 'number' && Number.isFinite(v))
+  return defined.length ? Math.min(...defined) : undefined
 }
 
 function normalizePlayerFitFields(player: Partial<Fc26PlayerWithFitScore>): Fc26PlayerWithFitScore {
