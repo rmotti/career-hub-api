@@ -64,20 +64,32 @@ export type Fc26PlayerWithFitScore = Fc26Player & {
   fitProfileSize: number | null
 }
 
+/** Minimal player shape needed to query the fit-score service (a subset of `Fc26Player`). */
+export type FitScorePlayerInput = Pick<
+  Fc26Player,
+  'sofifaId' | 'age' | 'nation' | 'league' | 'marketValue' | 'positions'
+>
+
 function buildCacheKey(filters: Omit<Fc26PlayerFilters, 'saveId' | 'objective'>): string {
   return `fc26:list:${JSON.stringify(filters)}`
 }
 
-async function enrichWithFitScore(
-  players: Fc26Player[],
+/**
+ * Queries the fit-score service for a set of players against one club + objective and returns
+ * a `sofifaId -> FitScoreResult` map. Groups by position group, reads/writes Redis per player,
+ * and batches the misses. Fails open: players with no score are simply absent from the map.
+ * Shared by the scouting list enrichment and the shortlist (so both honour the same cache).
+ */
+export async function computeFitScoreMap(
+  players: FitScorePlayerInput[],
   clubName: string,
   objective: string
-): Promise<Fc26PlayerWithFitScore[]> {
+): Promise<Map<number, FitScoreResult>> {
   const clubLeague = findLeagueByClub(clubName)
   const fitScoreClubName = toFitScoreClubName(clubName, clubLeague)
 
   // Group players by their primary position's position group
-  const groups = new Map<string, Fc26Player[]>()
+  const groups = new Map<string, FitScorePlayerInput[]>()
   for (const player of players) {
     const posGroup = POSITION_GROUP[player.positions[0]] ?? player.positions[0]
     if (!groups.has(posGroup)) groups.set(posGroup, [])
@@ -90,7 +102,7 @@ async function enrichWithFitScore(
     Array.from(groups.entries()).map(async ([positionGroup, groupPlayers]) => {
       const cachePrefix = `fit-score:${fitScoreClubName}:${positionGroup}:${objective}`
 
-      const uncached: Fc26Player[] = []
+      const uncached: FitScorePlayerInput[] = []
       for (const p of groupPlayers) {
         const cached = await cacheGet<FitScoreResult>(`${cachePrefix}:${p.sofifaId}`)
         if (cached) {
@@ -124,6 +136,16 @@ async function enrichWithFitScore(
       }
     })
   )
+
+  return scoreMap
+}
+
+async function enrichWithFitScore(
+  players: Fc26Player[],
+  clubName: string,
+  objective: string
+): Promise<Fc26PlayerWithFitScore[]> {
+  const scoreMap = await computeFitScoreMap(players, clubName, objective)
 
   const enriched = players.map((p) => ({
     ...p,

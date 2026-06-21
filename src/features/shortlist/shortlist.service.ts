@@ -1,7 +1,32 @@
-import { ShortlistPriority } from '@prisma/client'
+import { Prisma, ShortlistPriority } from '@prisma/client'
 import { prisma } from '../../shared/lib/prisma.js'
 import { AppError, NotFoundError } from '../../shared/utils/errors.js'
 import { assertSaveAccess } from '../../shared/utils/save-access.js'
+import { computeFitScoreMap } from '../fc26-players/fc26-players.service.js'
+import type { FitScoreResult } from '../../shared/lib/fit-score-client.js'
+
+const DEFAULT_OBJECTIVE = 'balanced'
+
+const SHORTLIST_PLAYER_SELECT = {
+  id: true,
+  sofifaId: true,
+  name: true,
+  longName: true,
+  age: true,
+  ovr: true,
+  potential: true,
+  positions: true,
+  nation: true,
+  club: true,
+  league: true,
+  marketValue: true,
+  wage: true,
+  playerFaceUrl: true,
+} satisfies Prisma.Fc26PlayerSelect
+
+type ShortlistItemWithPlayer = Prisma.ShortlistItemGetPayload<{
+  include: { fc26Player: { select: typeof SHORTLIST_PLAYER_SELECT } }
+}>
 
 export interface ShortlistCreateInput {
   fc26PlayerId: number
@@ -20,29 +45,59 @@ export async function listShortlist(saveId: string, userId: string) {
   const items = await prisma.shortlistItem.findMany({
     where: { saveId },
     orderBy: { createdAt: 'desc' },
-    include: {
-      fc26Player: {
-        select: {
-          id: true,
-          sofifaId: true,
-          name: true,
-          longName: true,
-          age: true,
-          ovr: true,
-          potential: true,
-          positions: true,
-          nation: true,
-          club: true,
-          league: true,
-          marketValue: true,
-          wage: true,
-          playerFaceUrl: true,
-        },
-      },
-    },
+    include: { fc26Player: { select: SHORTLIST_PLAYER_SELECT } },
   })
 
-  return items
+  return enrichShortlistWithFitScore(saveId, items)
+}
+
+/**
+ * Attaches the fit-score fields to each shortlisted player, computed against the save's active
+ * club and the objective of its default playbook (so the score matches what scouting shows and
+ * reuses the same Redis cache). Fails open: without an active club, or when the fit-score service
+ * is unavailable, the fields are present but null — the shortlist still loads.
+ */
+async function enrichShortlistWithFitScore(saveId: string, items: ShortlistItemWithPlayer[]) {
+  if (!items.length) return items
+
+  const clubStint = await prisma.clubStint.findFirst({
+    where: { saveId, isCurrent: true },
+    select: { club: true },
+  })
+
+  if (!clubStint) return items.map((item) => attachFit(item))
+
+  const objective = await resolveSaveObjective(saveId)
+  const scoreMap = await computeFitScoreMap(
+    items.map((item) => item.fc26Player),
+    clubStint.club,
+    objective,
+  )
+
+  return items.map((item) => attachFit(item, scoreMap.get(item.fc26Player.sofifaId)))
+}
+
+function attachFit(item: ShortlistItemWithPlayer, result?: FitScoreResult) {
+  return {
+    ...item,
+    fc26Player: {
+      ...item.fc26Player,
+      fitScore: result?.fit_score ?? null,
+      fitConfidence: result?.confidence ?? null,
+      fitProfileSize: result?.profile_size ?? null,
+    },
+  }
+}
+
+async function resolveSaveObjective(saveId: string): Promise<string> {
+  const playbook = await prisma.scoutPlaybook.findFirst({
+    where: { saveId, isDefault: true },
+    orderBy: { updatedAt: 'desc' },
+    select: { preferences: true },
+  })
+
+  const objective = (playbook?.preferences as { objective?: string } | null)?.objective
+  return objective ?? DEFAULT_OBJECTIVE
 }
 
 export async function addShortlistItem(saveId: string, input: ShortlistCreateInput, userId: string) {
