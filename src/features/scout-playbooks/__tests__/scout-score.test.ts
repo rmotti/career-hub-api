@@ -58,13 +58,14 @@ describe('scout score — age (convex curve, younger is better)', () => {
   })
 })
 
-describe('scout score — potential as upside (potential − ovr)', () => {
+describe('scout score — potential is the real ceiling (not upside)', () => {
   const book = playbook({ potential: 1 })
-  it('scores the headroom, not the level', () => {
-    expect(scoreOf(player({ ovr: 80, potential: 80 }), book)).toBe(0)
-    expect(scoreOf(player({ ovr: 80, potential: 88 }), book)).toBe(40)
-    expect(scoreOf(player({ ovr: 80, potential: 100 }), book)).toBe(100)
-    expect(scoreOf(player({ ovr: 80, potential: 110 }), book)).toBe(100)
+  it('scores the potential level on the same fixed scale as overall', () => {
+    // A weak prospect must NOT outscore a stronger one: 55→70 (44.4) < 88→90 (88.9).
+    expect(scoreOf(player({ ovr: 55, potential: 70 }), book)).toBe(44.4)
+    expect(scoreOf(player({ ovr: 88, potential: 90 }), book)).toBe(88.9)
+    expect(scoreOf(player({ ovr: 80, potential: 95 }), book)).toBe(100)
+    expect(scoreOf(player({ ovr: 80, potential: 49 }), book)).toBe(0)
   })
 })
 
@@ -112,9 +113,9 @@ describe('scout score — cost is budget-relative', () => {
 
 describe('scout score — default playbook end-to-end', () => {
   it('blends every component with the budget context', () => {
-    // overall 66.7·.30 + potential(gap8→40)·.15 + age22(86)·.15 + fit(0)·.15 + market(50/100→50)·.25
+    // overall 66.7·.30 + potential(88→84.4)·.15 + age22(86)·.15 + fit(0)·.15 + market(50/100→50)·.25
     const result = calculateScoutScore(basePlayer, DEFAULT_SCOUT_PLAYBOOK, { marketValueRef: 100 })
-    expect(result.scoutScore).toBe(51.4)
+    expect(result.scoutScore).toBe(58.1)
     expect(result.scoutScoreConfidence).toBe('fallback')
   })
 })

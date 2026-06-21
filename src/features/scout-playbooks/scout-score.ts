@@ -26,7 +26,6 @@ const COMPONENT_LABEL: Record<ScoutScoreComponent, string> = {
 // means the same thing in every search. See docs/04_Next_Steps/4.4 B-003.
 const OVR_FLOOR = 50
 const OVR_CEIL = 95
-const POTENTIAL_UPSIDE_DELTA = 20
 
 // Age decays from 100 at AGE_ANCHOR with an accelerating per-year penalty.
 const AGE_ANCHOR = 16
@@ -139,7 +138,7 @@ function calculateComponent(
   }
 
   if (key === 'potential') {
-    return { ...base, score: scorePotentialUpside(player.potential, player.ovr), value: player.potential, available: true }
+    return { ...base, score: scoreLevel(player.potential), value: player.potential, available: true }
   }
 
   if (key === 'age') {
@@ -193,14 +192,10 @@ function calculateComponent(
   return { ...base, score: scoreBudget(player.wage, wageRef), value: player.wage, available: true }
 }
 
-// Overall: fixed linear map OVR 50→0, 95→100 (B-003 #5).
-function scoreLevel(ovr: number): number {
-  return clampScore(((ovr - OVR_FLOOR) / (OVR_CEIL - OVR_FLOOR)) * 100)
-}
-
-// Potential: upside = headroom (potential − ovr) over DELTA, clamped (B-003 #4).
-function scorePotentialUpside(potential: number, ovr: number): number {
-  return clampScore(((potential - ovr) / POTENTIAL_UPSIDE_DELTA) * 100)
+// Level on a fixed scale (rating 50→0, 95→100). Used for both `overall` and `potential`
+// (potential = the real ceiling, not the upside gap — B-003 #4/#5; corrected 2026-06-21).
+function scoreLevel(rating: number): number {
+  return clampScore(((rating - OVR_FLOOR) / (OVR_CEIL - OVR_FLOOR)) * 100)
 }
 
 // Age: 100 at AGE_ANCHOR, accelerating per-year penalty by band (B-003 #2).
