@@ -81,6 +81,11 @@ export async function scoutingRoutes(app: FastifyInstance) {
             enum: ['balanced', 'title', 'youth', 'rebuild'],
             default: 'balanced',
           },
+          includeTransfers: {
+            type: 'boolean',
+            default: false,
+            description: 'Inclui a lista das últimas contratações históricas (player_name, transfer_season, from_club_name)',
+          },
         },
       },
     },

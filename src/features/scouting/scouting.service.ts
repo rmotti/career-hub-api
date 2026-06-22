@@ -278,6 +278,7 @@ export async function getClubArchetype(
   saveId: string,
   position: string,
   objective: string,
+  includeTransfers = false,
 ): Promise<ClubArchetypeResult> {
   await assertSaveAccess(saveId, userId)
 
@@ -293,9 +294,10 @@ export async function getClubArchetype(
   const league = findLeagueByClub(stint.club)
   const fitClubName = toFitScoreClubName(stint.club, league)
 
-  const cacheKey = `archetype:${fitClubName}:${positionGroup}:${objective}`
+  // Cache separado com/sem transfers — os transfers não devem poluir o cache do arquétipo base
+  const cacheKey = `archetype:${fitClubName}:${positionGroup}:${objective}${includeTransfers ? ':transfers' : ''}`
   const cached = await cacheGet<FitScoreArchetypeResult>(cacheKey)
-  const raw = cached ?? await fetchFitScoreArchetype(fitClubName, positionGroup, objective)
+  const raw = cached ?? await fetchFitScoreArchetype(fitClubName, positionGroup, objective, 5, includeTransfers)
 
   if (!raw) {
     return { available: false, reason: 'Nenhum perfil histórico disponível para esse clube/posição.' }

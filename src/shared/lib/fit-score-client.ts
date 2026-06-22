@@ -196,6 +196,15 @@ export async function fetchFitScoreBatch(
   }
 }
 
+export interface FitScoreArchetypeTransfer {
+  player_name: string | null
+  player_id: number | null
+  transfer_season: string | null
+  from_club_name: string | null
+  nationality: string | null
+  origin_league: string | null
+}
+
 export interface FitScoreArchetypeResult {
   profile_size: number
   confidence: 'high' | 'medium' | 'low' | 'none'
@@ -204,6 +213,7 @@ export interface FitScoreArchetypeResult {
     nationality: Array<{ value: string; count: number; pct: number }>
     origin_league: Array<{ value: string; count: number; pct: number }>
   }
+  transfers?: FitScoreArchetypeTransfer[]
 }
 
 /**
@@ -216,6 +226,8 @@ export async function fetchFitScoreArchetype(
   positionGroup: string,
   objective: string,
   topKCategories = 5,
+  includeTransfers = false,
+  topTransfers = 20,
 ): Promise<FitScoreArchetypeResult | null> {
   const fitScoreUrl = process.env.FIT_SCORE_SERVICE_URL?.replace(/\/+$/, '')
 
@@ -234,6 +246,8 @@ export async function fetchFitScoreArchetype(
         position_group: positionGroup,
         objective,
         top_k_categories: topKCategories,
+        include_transfers: includeTransfers,
+        top_transfers: topTransfers,
       }),
       signal: AbortSignal.timeout(FIT_SCORE_TIMEOUT_MS),
     })

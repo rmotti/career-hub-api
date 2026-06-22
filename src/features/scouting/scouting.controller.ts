@@ -40,7 +40,7 @@ export async function evaluateSigningFitHandler(
   return reply.send(result)
 }
 
-interface ArchetypeQuery { position: string; objective?: string }
+interface ArchetypeQuery { position: string; objective?: string; includeTransfers?: boolean }
 
 export async function getClubArchetypeHandler(
   request: FastifyRequest<{ Params: SaveParams; Querystring: ArchetypeQuery }>,
@@ -51,6 +51,7 @@ export async function getClubArchetypeHandler(
     request.params.saveId,
     request.query.position,
     request.query.objective ?? 'balanced',
+    request.query.includeTransfers ?? false,
   )
   return reply.send(result)
 }
