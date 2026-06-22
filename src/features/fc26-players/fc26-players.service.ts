@@ -352,10 +352,10 @@ export async function getFc26Filters() {
 }
 
 const FIT_CONCEPT_LABEL: Record<FitBreakdownItem['key'], string> = {
-  nationality: 'Nacionalidade',
-  origin_league: 'Liga de origem',
-  age: 'Idade',
-  cost: 'Custo',
+  nationality: 'Nationality',
+  origin_league: 'Origin league',
+  age: 'Age',
+  cost: 'Cost',
 }
 
 export interface FitBreakdownResponse {
