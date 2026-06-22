@@ -1,8 +1,15 @@
 import { prisma } from '../../shared/lib/prisma.js'
 import { cacheGet, cacheSet } from '../../shared/utils/cache.js'
-import { fetchFitScoreBatch, FitScoreCandidate, FitScoreResult } from '../../shared/lib/fit-score-client.js'
+import {
+  fetchFitScoreBatch,
+  fetchFitScoreExplain,
+  FitScoreCandidate,
+  FitScoreResult,
+  FitBreakdownItem,
+} from '../../shared/lib/fit-score-client.js'
 import { toFitScoreClubName, toLeagueCode, toNationality } from '../../shared/utils/fit-score-maps.js'
 import { findLeagueByClub } from '../clubs/clubs.service.js'
+import { AppError } from '../../shared/utils/errors.js'
 import type { Fc26Player } from '@prisma/client'
 
 const TTL = {
@@ -342,4 +349,84 @@ export async function getFc26Filters() {
   const result = { positions, nations, leagues, clubsByLeague }
   await cacheSet(cacheKey, result, TTL.filters)
   return result
+}
+
+const FIT_CONCEPT_LABEL: Record<FitBreakdownItem['key'], string> = {
+  nationality: 'Nacionalidade',
+  origin_league: 'Liga de origem',
+  age: 'Idade',
+  cost: 'Custo',
+}
+
+export interface FitBreakdownResponse {
+  fitScore: number | null
+  fitConfidence: 'high' | 'medium' | 'low' | 'none' | null
+  fitProfileSize: number | null
+  breakdown: Array<{
+    key: FitBreakdownItem['key']
+    label: string
+    weight: number
+    score: number | null
+    candidateValue: string
+    clubContext: string
+  }>
+}
+
+/**
+ * Justifies one player's fit score for the save's current club, opening the per-concept
+ * breakdown (on-demand, for the detail click). Mirrors the candidate-building of the list
+ * enrichment so the headline fit matches what the list shows. Returns null ⇒ player not
+ * found (controller → 404). Fails open if the svc is unreachable (breakdown empty).
+ */
+export async function getFitBreakdown(
+  sofifaId: number,
+  saveId: string,
+  objective = 'balanced'
+): Promise<FitBreakdownResponse | null> {
+  const player = await prisma.fc26Player.findUnique({ where: { sofifaId } })
+  if (!player) return null
+
+  const clubStint = await prisma.clubStint.findFirst({
+    where: { saveId, isCurrent: true },
+    select: { club: true },
+  })
+  if (!clubStint) throw new AppError('Save sem clube atual para calcular o fit', 422)
+
+  const clubName = clubStint.club
+  const positionGroup = POSITION_GROUP[player.positions[0]] ?? player.positions[0]
+  const fitScoreClubName = toFitScoreClubName(clubName, findLeagueByClub(clubName))
+
+  const cacheKey = `fit-explain:v1:${fitScoreClubName}:${positionGroup}:${objective}:${sofifaId}`
+  const cached = await cacheGet<FitBreakdownResponse>(cacheKey)
+  if (cached) return cached
+
+  const result = await fetchFitScoreExplain(fitScoreClubName, positionGroup, objective, {
+    age: player.age,
+    nationality: toNationality(player.nation),
+    origin_league: toLeagueCode(player.league),
+    market_value_eur: (player.marketValue ?? 0) * 1_000_000,
+    fee_type: 'paid',
+  })
+
+  // Fail open without caching, so a transient svc outage doesn't poison the cache.
+  if (!result) {
+    return { fitScore: null, fitConfidence: null, fitProfileSize: null, breakdown: [] }
+  }
+
+  const response: FitBreakdownResponse = {
+    fitScore: result.fit_score,
+    fitConfidence: result.confidence,
+    fitProfileSize: result.profile_size,
+    breakdown: result.breakdown.map((b) => ({
+      key: b.key,
+      label: FIT_CONCEPT_LABEL[b.key] ?? b.key,
+      weight: b.weight,
+      score: b.score,
+      candidateValue: b.candidate_value,
+      clubContext: b.club_context,
+    })),
+  }
+
+  await cacheSet(cacheKey, response, TTL.fitScore)
+  return response
 }

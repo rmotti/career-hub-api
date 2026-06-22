@@ -2,6 +2,7 @@ import { FastifyInstance } from 'fastify'
 import {
   listFc26PlayersHandler,
   getFc26PlayerHandler,
+  getFc26PlayerFitBreakdownHandler,
   getFc26FiltersHandler,
 } from './fc26-players.controller.js'
 import { rateLimit } from '../../shared/utils/rate-limit.js'
@@ -198,4 +199,54 @@ export async function fc26PlayersRoutes(app: FastifyInstance) {
       },
     },
   }, getFc26PlayerHandler)
+
+  app.get('/fc26-players/:sofifaId/fit-breakdown', {
+    schema: {
+      tags: ['FC26 Players'],
+      summary: 'Justificativa do fit score (breakdown por conceito)',
+      description: [
+        'Abre o fit score do jogador para o clube atual do save em 4 dimensões',
+        '(nacionalidade, liga de origem, idade, custo). Cada `score` é um percentil 0–100',
+        'calibrado vs. as contratações reais do clube — atribuição, não decomposição exata',
+        '(o `fitScore` geral é o percentil da distância agregada, não a soma das linhas).',
+      ].join(' '),
+      params: {
+        type: 'object',
+        required: ['sofifaId'],
+        properties: { sofifaId: { type: 'integer', example: 158023 } },
+      },
+      querystring: {
+        type: 'object',
+        required: ['saveId'],
+        properties: {
+          saveId:    { type: 'string', description: 'ID do save — define o clube atual contra o qual o fit é calculado' },
+          objective: { type: 'string', default: 'balanced', description: 'Objetivo do clube (ex: balanced, rebuild, youth, title)' },
+        },
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            fitScore:       { type: 'number', nullable: true },
+            fitConfidence:  { type: 'string', nullable: true },
+            fitProfileSize: { type: 'integer', nullable: true },
+            breakdown: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  key:            { type: 'string' },
+                  label:          { type: 'string' },
+                  weight:         { type: 'number' },
+                  score:          { type: 'number', nullable: true },
+                  candidateValue: { type: 'string' },
+                  clubContext:    { type: 'string' },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  }, getFc26PlayerFitBreakdownHandler)
 }

@@ -1,5 +1,5 @@
 import { FastifyRequest, FastifyReply } from 'fastify'
-import { listFc26Players, getFc26PlayerById, getFc26Filters } from './fc26-players.service.js'
+import { listFc26Players, getFc26PlayerById, getFc26Filters, getFitBreakdown } from './fc26-players.service.js'
 import { NotFoundError } from '../../shared/utils/errors.js'
 
 interface ListQuerystring {
@@ -31,6 +31,11 @@ interface ListQuerystring {
 
 interface DetailParams {
   sofifaId: string
+}
+
+interface FitBreakdownQuerystring {
+  saveId: string
+  objective?: string
 }
 
 function splitParam(value: string | undefined): string[] | undefined {
@@ -69,6 +74,17 @@ export async function getFc26PlayerHandler(
   const player = await getFc26PlayerById(sofifaId)
   if (!player) throw new NotFoundError('Jogador não encontrado')
   return reply.send(player)
+}
+
+export async function getFc26PlayerFitBreakdownHandler(
+  request: FastifyRequest<{ Params: DetailParams; Querystring: FitBreakdownQuerystring }>,
+  reply: FastifyReply
+) {
+  const sofifaId = Number(request.params.sofifaId)
+  const { saveId, objective } = request.query
+  const breakdown = await getFitBreakdown(sofifaId, saveId, objective)
+  if (!breakdown) throw new NotFoundError('Jogador não encontrado')
+  return reply.send(breakdown)
 }
 
 export async function getFc26FiltersHandler(

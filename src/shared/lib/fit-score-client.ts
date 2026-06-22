@@ -18,6 +18,26 @@ export interface FitScoreResult {
   profile_size: number
 }
 
+export interface FitBreakdownItem {
+  key: 'nationality' | 'origin_league' | 'age' | 'cost'
+  weight: number
+  score: number | null
+  candidate_value: string
+  club_context: string
+}
+
+export interface FitExplainResult extends FitScoreResult {
+  breakdown: FitBreakdownItem[]
+}
+
+export interface FitScoreCandidateInput {
+  age: number
+  nationality: string | null
+  origin_league: string | null
+  market_value_eur: number
+  fee_type: 'paid'
+}
+
 const FIT_SCORE_TIMEOUT_MS = 3000
 // How many consecutive failures before the service is considered "down" (not just degraded).
 const DOWN_THRESHOLD = 3
@@ -173,5 +193,58 @@ export async function fetchFitScoreBatch(
       error: error instanceof Error ? error.message : 'score/batch request failed',
     })
     return new Map()
+  }
+}
+
+/**
+ * Fetches the per-concept breakdown that justifies one candidate's fit score (on-demand,
+ * for the detail/click view). Fails open (returns null) like the batch path, so the
+ * coupling stays optional — the caller degrades to "breakdown unavailable".
+ */
+export async function fetchFitScoreExplain(
+  clubName: string,
+  positionGroup: string,
+  objective: string,
+  candidate: FitScoreCandidateInput
+): Promise<FitExplainResult | null> {
+  const fitScoreUrl = process.env.FIT_SCORE_SERVICE_URL?.replace(/\/+$/, '')
+
+  if (!fitScoreUrl) {
+    logger.warn({ service: 'fit-score', outcome: 'unconfigured' }, 'FIT_SCORE_SERVICE_URL is not configured')
+    return null
+  }
+
+  const startedAt = Date.now()
+  try {
+    const res = await fetch(`${fitScoreUrl}/score/explain`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        club_name: clubName,
+        position_group: positionGroup,
+        objective,
+        candidate,
+      }),
+      signal: AbortSignal.timeout(FIT_SCORE_TIMEOUT_MS),
+    })
+
+    const durationMs = Date.now() - startedAt
+
+    if (!res.ok) {
+      record('http_error', { durationMs, status: res.status })
+      return null
+    }
+
+    const data = await res.json() as { result: FitExplainResult }
+    record('ok', { durationMs })
+    return data.result
+  } catch (error) {
+    const durationMs = Date.now() - startedAt
+    const isTimeout = error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError')
+    record(isTimeout ? 'timeout' : 'network_error', {
+      durationMs,
+      error: error instanceof Error ? error.message : 'score/explain request failed',
+    })
+    return null
   }
 }
