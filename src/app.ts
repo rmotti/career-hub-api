@@ -22,6 +22,7 @@ import { savedSearchesRoutes } from './features/saved-searches/saved-searches.ro
 import { scoutingRoutes } from './features/scouting/scouting.routes.js'
 import { chatRoutes } from './features/chat/chat.routes.js'
 import { healthRoutes } from './features/health/health.routes.js'
+import { adminRoutes } from './features/admin/admin.routes.js'
 import { mcpPlugin } from './mcp/plugin.js'
 import { getTrustedOrigins, isCredentialedOriginAllowed } from './shared/utils/origins.js'
 import { httpRequestStarted, httpRequestFinished, recordHttpRequest } from './shared/lib/metrics.js'
@@ -173,6 +174,9 @@ app.register(async (protectedRoutes) => {
   protectedRoutes.register(transfersRoutes, { prefix: '/api' })
   protectedRoutes.register(trophiesRoutes, { prefix: '/api' })
   protectedRoutes.register(competitionsRoutes, { prefix: '/api' })
+
+  // Admin surface — gated by requireRole('admin') inside the plugin (no plan check needed).
+  protectedRoutes.register(adminRoutes, { prefix: '/api' })
 
   // PRO surface — requires a PRO+ plan (admin always passes). Without this the paywall is frontend-only.
   protectedRoutes.register(async (proRoutes) => {
