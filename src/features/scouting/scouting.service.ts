@@ -2,6 +2,11 @@ import type { Position, Prisma } from '@prisma/client'
 import { prisma } from '../../shared/lib/prisma.js'
 import { AppError, NotFoundError } from '../../shared/utils/errors.js'
 import { listFc26Players } from '../fc26-players/fc26-players.service.js'
+import { fetchFitScoreArchetype, type FitScoreArchetypeResult } from '../../shared/lib/fit-score-client.js'
+import { toFitScoreClubName } from '../../shared/utils/fit-score-maps.js'
+import { findLeagueByClub } from '../clubs/clubs.service.js'
+import { cacheGet, cacheSet } from '../../shared/utils/cache.js'
+import { assertSaveAccess } from '../../shared/utils/save-access.js'
 import { getFormation } from './formations.js'
 
 export type GapSeverity = 'critical' | 'moderate' | 'low'
@@ -255,4 +260,48 @@ export async function evaluateSigningFit(
     fitAnalysis: { samePositionCount: squad.length, bestSquadOvr, avgSquadAge, ovrDelta, ageDelta, note },
     alternatives,
   }
+}
+
+const POSITION_GROUP: Record<string, string> = {
+  GOL: 'GK', ZAG: 'CB', LD: 'RB', LE: 'LB', VOL: 'DM', MC: 'CM',
+  MD: 'RM', ME: 'LM', MEI: 'AM', PD: 'RW', PE: 'LW', SA: 'SS', ATA: 'CF',
+}
+
+const ARCHETYPE_TTL = 60 * 60 * 24
+
+export type ClubArchetypeResult =
+  | { available: true; clubName: string; positionGroup: string; objective: string } & FitScoreArchetypeResult
+  | { available: false; reason: string }
+
+export async function getClubArchetype(
+  userId: string,
+  saveId: string,
+  position: string,
+  objective: string,
+): Promise<ClubArchetypeResult> {
+  await assertSaveAccess(saveId, userId)
+
+  const positionGroup = POSITION_GROUP[position.toUpperCase()]
+  if (!positionGroup) throw new AppError(`Posição inválida: ${position}.`, 400)
+
+  const stint = await prisma.clubStint.findFirst({
+    where: { saveId, isCurrent: true },
+    select: { club: true },
+  })
+  if (!stint) throw new AppError('Esta save não tem um clube ativo.', 400)
+
+  const league = findLeagueByClub(stint.club)
+  const fitClubName = toFitScoreClubName(stint.club, league)
+
+  const cacheKey = `archetype:${fitClubName}:${positionGroup}:${objective}`
+  const cached = await cacheGet<FitScoreArchetypeResult>(cacheKey)
+  const raw = cached ?? await fetchFitScoreArchetype(fitClubName, positionGroup, objective)
+
+  if (!raw) {
+    return { available: false, reason: 'Nenhum perfil histórico disponível para esse clube/posição.' }
+  }
+
+  if (!cached) await cacheSet(cacheKey, raw, ARCHETYPE_TTL)
+
+  return { available: true, clubName: stint.club, positionGroup, objective, ...raw }
 }

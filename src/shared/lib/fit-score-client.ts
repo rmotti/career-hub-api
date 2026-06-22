@@ -196,6 +196,69 @@ export async function fetchFitScoreBatch(
   }
 }
 
+export interface FitScoreArchetypeResult {
+  profile_size: number
+  confidence: 'high' | 'medium' | 'low' | 'none'
+  archetype: {
+    age: { median: number; p25: number; p75: number }
+    nationality: Array<{ value: string; count: number; pct: number }>
+    origin_league: Array<{ value: string; count: number; pct: number }>
+  }
+}
+
+/**
+ * Fetches the historical transfer archetype for a club/position/objective combination.
+ * Returns null if the svc is unreachable or the club has no usable profile (the caller
+ * surfaces this as "no archetype available" rather than an error).
+ */
+export async function fetchFitScoreArchetype(
+  clubName: string,
+  positionGroup: string,
+  objective: string,
+  topKCategories = 5,
+): Promise<FitScoreArchetypeResult | null> {
+  const fitScoreUrl = process.env.FIT_SCORE_SERVICE_URL?.replace(/\/+$/, '')
+
+  if (!fitScoreUrl) {
+    logger.warn({ service: 'fit-score', outcome: 'unconfigured' }, 'FIT_SCORE_SERVICE_URL is not configured')
+    return null
+  }
+
+  const startedAt = Date.now()
+  try {
+    const res = await fetch(`${fitScoreUrl}/profile`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        club_name: clubName,
+        position_group: positionGroup,
+        objective,
+        top_k_categories: topKCategories,
+      }),
+      signal: AbortSignal.timeout(FIT_SCORE_TIMEOUT_MS),
+    })
+
+    const durationMs = Date.now() - startedAt
+
+    if (!res.ok) {
+      record('http_error', { durationMs, status: res.status })
+      return null
+    }
+
+    const data = await res.json() as FitScoreArchetypeResult
+    record('ok', { durationMs })
+    return data
+  } catch (error) {
+    const durationMs = Date.now() - startedAt
+    const isTimeout = error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError')
+    record(isTimeout ? 'timeout' : 'network_error', {
+      durationMs,
+      error: error instanceof Error ? error.message : 'profile request failed',
+    })
+    return null
+  }
+}
+
 /**
  * Fetches the per-concept breakdown that justifies one candidate's fit score (on-demand,
  * for the detail/click view). Fails open (returns null) like the batch path, so the

@@ -1,5 +1,5 @@
 import { FastifyReply, FastifyRequest } from 'fastify'
-import { evaluateSigningFit, identifyGaps, searchTransferTargets } from './scouting.service.js'
+import { evaluateSigningFit, getClubArchetype, identifyGaps, searchTransferTargets } from './scouting.service.js'
 
 interface SaveParams { saveId: string }
 interface EvaluateParams { saveId: string; sofifaId: string }
@@ -37,5 +37,20 @@ export async function evaluateSigningFitHandler(
 ) {
   const sofifaId = Number(request.params.sofifaId)
   const result = await evaluateSigningFit(request.user!.id, request.params.saveId, sofifaId)
+  return reply.send(result)
+}
+
+interface ArchetypeQuery { position: string; objective?: string }
+
+export async function getClubArchetypeHandler(
+  request: FastifyRequest<{ Params: SaveParams; Querystring: ArchetypeQuery }>,
+  reply: FastifyReply,
+) {
+  const result = await getClubArchetype(
+    request.user!.id,
+    request.params.saveId,
+    request.query.position,
+    request.query.objective ?? 'balanced',
+  )
   return reply.send(result)
 }

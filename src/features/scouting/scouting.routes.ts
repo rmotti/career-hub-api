@@ -56,4 +56,33 @@ export async function scoutingRoutes(app: FastifyInstance) {
       },
     },
   }, controller.evaluateSigningFitHandler)
+
+  app.get('/scouting/saves/:saveId/archetype', {
+    schema: {
+      tags: ['Scouting'],
+      summary: 'Arquétipo histórico do clube para uma posição',
+      description: 'Retorna o perfil típico de jogador que o clube ativo costuma contratar nessa posição — idade, nacionalidades e ligas de origem mais frequentes — derivado do histórico real de transferências do fit-score-svc.',
+      params: {
+        type: 'object',
+        required: ['saveId'],
+        properties: { saveId: { type: 'string' } },
+      },
+      querystring: {
+        type: 'object',
+        required: ['position'],
+        properties: {
+          position: {
+            type: 'string',
+            enum: ['GOL', 'ZAG', 'LD', 'LE', 'VOL', 'MC', 'MD', 'ME', 'MEI', 'PD', 'PE', 'SA', 'ATA'],
+            description: 'Posição FC26 (ex: ATA, MEI, ZAG)',
+          },
+          objective: {
+            type: 'string',
+            enum: ['balanced', 'title', 'youth', 'rebuild'],
+            default: 'balanced',
+          },
+        },
+      },
+    },
+  }, controller.getClubArchetypeHandler)
 }
