@@ -19,7 +19,7 @@ export interface FitScoreResult {
 }
 
 export interface FitBreakdownItem {
-  key: 'nationality' | 'origin_league' | 'age' | 'cost'
+  key: 'nationality' | 'origin_league' | 'age'
   weight: number
   score: number | null
   candidate_value: string

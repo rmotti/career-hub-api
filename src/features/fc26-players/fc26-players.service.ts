@@ -107,10 +107,11 @@ export async function computeFitScoreMap(
 
   await Promise.all(
     Array.from(groups.entries()).map(async ([positionGroup, groupPlayers]) => {
-      // v2: fit score recalibrado pra escala 0–100 (percentil vs. DNA do clube).
-      // O bump invalida entradas 0–1 antigas — sem ele, valores das duas escalas
-      // conviveriam por até TTL.fitScore (6h) após o deploy.
-      const cachePrefix = `fit-score:v2:${fitScoreClubName}:${positionGroup}:${objective}`
+      // v3: fit score sem a dimensão de custo (dado de fee ~70% lixo + redundante com
+      // o componente marketValue do scout). Cada bump invalida os scores da versão
+      // anterior — sem ele, valores de calibrações diferentes conviveriam por até
+      // TTL.fitScore (6h) após o deploy. (v1 0–1 → v2 0–100 c/ custo → v3 sem custo.)
+      const cachePrefix = `fit-score:v3:${fitScoreClubName}:${positionGroup}:${objective}`
 
       const uncached: FitScorePlayerInput[] = []
       for (const p of groupPlayers) {
@@ -355,7 +356,6 @@ const FIT_CONCEPT_LABEL: Record<FitBreakdownItem['key'], string> = {
   nationality: 'Nationality',
   origin_league: 'Origin league',
   age: 'Age',
-  cost: 'Cost',
 }
 
 export interface FitBreakdownResponse {
@@ -396,7 +396,8 @@ export async function getFitBreakdown(
   const positionGroup = POSITION_GROUP[player.positions[0]] ?? player.positions[0]
   const fitScoreClubName = toFitScoreClubName(clubName, findLeagueByClub(clubName))
 
-  const cacheKey = `fit-explain:v1:${fitScoreClubName}:${positionGroup}:${objective}:${sofifaId}`
+  // v2: breakdown sem a dimensão de custo (ver cachePrefix do fit em computeFitScoreMap).
+  const cacheKey = `fit-explain:v2:${fitScoreClubName}:${positionGroup}:${objective}:${sofifaId}`
   const cached = await cacheGet<FitBreakdownResponse>(cacheKey)
   if (cached) return cached
 
