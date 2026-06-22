@@ -80,9 +80,9 @@ describe('scout score — historical fit', () => {
     })
   })
 
-  it('uses fit × 100 when the service returns a usable value', () => {
+  it('uses the calibrated 0–100 fit score directly when the service returns a usable value', () => {
     const result = calculateScoutScore(
-      player({ fitScore: 0.72, fitConfidence: 'medium', fitProfileSize: 18 }),
+      player({ fitScore: 72, fitConfidence: 'medium', fitProfileSize: 18 }),
       playbook({ historicalFit: 1 }),
     )
     expect(result.scoutScore).toBe(72)

@@ -161,9 +161,11 @@ function calculateComponent(
     }
 
     return {
+      // fitScore já chega calibrado em 0–100 (percentil vs. o DNA do clube) do
+      // fit-score-svc — não reescalar.
       ...base,
-      score: clampScore(player.fitScore * 100),
-      value: round(player.fitScore * 100),
+      score: clampScore(player.fitScore),
+      value: round(player.fitScore),
       available: true,
       confidence: player.fitConfidence,
       profileSize: player.fitProfileSize,

@@ -100,7 +100,10 @@ export async function computeFitScoreMap(
 
   await Promise.all(
     Array.from(groups.entries()).map(async ([positionGroup, groupPlayers]) => {
-      const cachePrefix = `fit-score:${fitScoreClubName}:${positionGroup}:${objective}`
+      // v2: fit score recalibrado pra escala 0–100 (percentil vs. DNA do clube).
+      // O bump invalida entradas 0–1 antigas — sem ele, valores das duas escalas
+      // conviveriam por até TTL.fitScore (6h) após o deploy.
+      const cachePrefix = `fit-score:v2:${fitScoreClubName}:${positionGroup}:${objective}`
 
       const uncached: FitScorePlayerInput[] = []
       for (const p of groupPlayers) {
