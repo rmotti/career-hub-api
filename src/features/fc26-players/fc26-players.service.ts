@@ -20,20 +20,23 @@ const TTL = {
 }
 
 // Maps internal position codes to fit-score-svc position groups
+// Posição FC26 (PT) → bucket de posição do fit-score-svc (GK / DEF / MID / ATT). Ver a
+// nota em scouting.service.ts: buckets amplos compensam o dataset histórico pequeno; o
+// serviço expõe granular + bucket, então reverter = só remapear os valores aqui.
 const POSITION_GROUP: Record<string, string> = {
   GOL: 'GK',
-  ZAG: 'CB',
-  LD:  'RB',
-  LE:  'LB',
-  VOL: 'DM',
-  MC:  'CM',
-  MD:  'RM',
-  ME:  'LM',
-  MEI: 'AM',
-  PD:  'RW',
-  PE:  'LW',
-  SA:  'SS',
-  ATA: 'CF',
+  ZAG: 'DEF',
+  LD:  'DEF',
+  LE:  'DEF',
+  VOL: 'MID',
+  MC:  'MID',
+  MD:  'MID',
+  ME:  'MID',
+  MEI: 'MID',
+  PD:  'ATT',
+  PE:  'ATT',
+  SA:  'ATT',
+  ATA: 'ATT',
 }
 
 export interface Fc26PlayerFilters {

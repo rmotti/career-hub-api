@@ -9,6 +9,8 @@ import { AppError } from '../../shared/utils/errors.js'
 const ALLOWED_PATTERNS = new Set<string>([
   'archetype:*',
   'archetype:*:transfers',
+  'fit-score:v3:*',
+  'fit-explain:v2:*',
 ])
 
 export async function invalidateCache(pattern: string): Promise<{ pattern: string }> {

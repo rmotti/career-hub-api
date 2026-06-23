@@ -262,9 +262,16 @@ export async function evaluateSigningFit(
   }
 }
 
+// Posição FC26 (PT) → bucket de posição do fit-score-svc. Hoje usamos 4 buckets amplos
+// (GK / DEF / MID / ATT) em vez dos 13 grupos granulares: o dataset histórico é pequeno
+// (mediana ~7 transferências por clube×posição granular), e agregar eleva a robustez do
+// cohort (mediana ~9, perfis com n>=10 sobem de 21% p/ 48%). O fit-score-svc expõe AMBOS
+// (granular + bucket), então voltar à granularidade = só remapear os valores aqui.
 const POSITION_GROUP: Record<string, string> = {
-  GOL: 'GK', ZAG: 'CB', LD: 'RB', LE: 'LB', VOL: 'DM', MC: 'CM',
-  MD: 'RM', ME: 'LM', MEI: 'AM', PD: 'RW', PE: 'LW', SA: 'SS', ATA: 'CF',
+  GOL: 'GK',
+  ZAG: 'DEF', LD: 'DEF', LE: 'DEF',
+  VOL: 'MID', MC: 'MID', MD: 'MID', ME: 'MID', MEI: 'MID',
+  PD: 'ATT', PE: 'ATT', SA: 'ATT', ATA: 'ATT',
 }
 
 const ARCHETYPE_TTL = 60 * 60 * 24
