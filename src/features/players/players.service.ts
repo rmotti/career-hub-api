@@ -5,6 +5,7 @@ import { Position, PlayerStatus, TransferType } from '@prisma/client'
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library'
 import { cacheGet, cacheSet, cacheInvalidate, cacheInvalidatePattern } from '../../shared/utils/cache.js'
 import { createSnapshot, writeAudit } from '../saves/snapshots.service.js'
+import { toFc26DatasetClubName } from '../../shared/utils/fc26-import-club-name.js'
 
 const TTL = {
   playersList: 60 * 60,        // 1h
@@ -644,13 +645,23 @@ export async function importFc26Squad(saveId: string, userId: string) {
     throw new AppError('Nenhum clube ativo neste save.', 400)
   }
 
+  // The app's club name (clubs.data.ts) and the FC26 dataset name diverge for
+  // the same club ("Bayer Leverkusen" vs "Bayer 04 Leverkusen"), so match on
+  // the resolved dataset name rather than the stint name.
+  const fc26ClubName = toFc26DatasetClubName(currentStint.club)
   const fc26Players = await prisma.fc26Player.findMany({
-    where: { club: currentStint.club },
+    where: { club: fc26ClubName },
   })
 
   if (fc26Players.length === 0) {
-    throw new NotFoundError(
-      `Nenhum jogador encontrado no dataset FC26 para o clube '${currentStint.club}'.`
+    // No rows for this club means it is absent from the FC26 dataset (e.g. an
+    // unlicensed club, or a women's team — the dataset has no women's leagues).
+    // Distinct code so the client can show a "club not in the game" toast
+    // instead of a generic error.
+    throw new AppError(
+      `O clube '${currentStint.club}' não existe no FC26, então não há elenco para importar.`,
+      404,
+      'CLUB_NOT_IN_FC26'
     )
   }
 

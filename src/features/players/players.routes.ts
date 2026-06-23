@@ -435,7 +435,7 @@ export async function playersRoutes(app: FastifyInstance) {
       schema: {
         tags: ['Players'],
         summary: 'Importar elenco do dataset FC26',
-        description: 'Busca todos os jogadores do dataset FC26 cujo `club` bate com o clube atual do save e cria um Player + PlayerSeasonStats (zerado) para cada um. Jogadores cujo nome já existe no save são pulados. Status default: `Important`. Posições inválidas no dataset são ignoradas. Retorna `{ imported, skipped, total }`.',
+        description: 'Busca todos os jogadores do dataset FC26 cujo `club` bate com o clube atual do save e cria um Player + PlayerSeasonStats (zerado) para cada um. Jogadores cujo nome já existe no save são pulados. Status default: `Important`. Posições inválidas no dataset são ignoradas. Retorna `{ imported, skipped, total }`. Se o clube não existe no FC26 (sem dados), retorna 404 com `error: "CLUB_NOT_IN_FC26"` — o cliente deve mostrar um toast informando que o time não existe no jogo.',
         params: {
           type: 'object',
           properties: {
