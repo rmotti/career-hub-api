@@ -13,10 +13,13 @@ const SCOPED_TTL = 600 // 10 min — covers one chat round; much shorter than th
  * Used in chat for the OpenAI callback: this way the full session token (which grants
  * full account access) never leaves our infrastructure. This token does not authenticate
  * against the main API — it's only recognized by `resolveMcpContext`.
+ *
+ * `saveId` (optional) pins the token to the save the chat conversation is about, so tools
+ * resolve the right save instead of falling back to the most recently updated one.
  */
-export async function mintMcpToken(userId: string): Promise<string> {
+export async function mintMcpToken(userId: string, saveId?: string): Promise<string> {
   const token = randomBytes(32).toString('base64url')
-  await cacheSet(`mcp:scoped:${token}`, { userId }, SCOPED_TTL)
+  await cacheSet(`mcp:scoped:${token}`, { userId, saveId }, SCOPED_TTL)
   return token
 }
 
@@ -25,8 +28,8 @@ export async function resolveMcpContext(req: FastifyRequest): Promise<McpContext
   if (!token) throw new AppError('Unauthorized', 401)
 
   // 1) Ephemeral MCP-scoped token (issued for the OpenAI callback in chat)
-  const scoped = await cacheGet<{ userId: string }>(`mcp:scoped:${token}`)
-  if (scoped) return { userId: scoped.userId, sessionToken: token }
+  const scoped = await cacheGet<{ userId: string; saveId?: string }>(`mcp:scoped:${token}`)
+  if (scoped) return { userId: scoped.userId, sessionToken: token, saveId: scoped.saveId }
 
   // 2) Full session token (direct MCP clients)
   const cacheKey = `mcp:session:${token}`

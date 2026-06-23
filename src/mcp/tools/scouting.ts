@@ -5,18 +5,96 @@ import {
   identifyGaps,
   searchTransferTargets,
 } from '../../features/scouting/scouting.service.js'
+import { prisma } from '../../shared/lib/prisma.js'
 import { formatBalance, millions } from '../../shared/utils/currency.js'
 import type { McpContext } from '../context.js'
 import { resolveSaveId } from '../utils.js'
+import { jsonResult, noSaveResult } from './helpers.js'
 
-const severityEmoji = { critical: '🔴', moderate: '🟡', low: '🟢' }
+const POSITION = z.enum(['GOL', 'ZAG', 'LD', 'LE', 'VOL', 'MC', 'ME', 'MD', 'MEI', 'PE', 'PD', 'SA', 'ATA'])
 
 export function registerScoutingTools(server: McpServer, ctx: McpContext) {
+  server.registerTool(
+    'find_player',
+    {
+      description:
+        'Resolve a player NAME to their canonical FC26 dataset row(s): sofifaId, club, positions, OVR, market value. Use this FIRST whenever the user names a player and you do NOT already have their sofifaId — before evaluate_signing_fit, add_to_shortlist or remove_from_shortlist. Returns the closest matches ranked by overall. Never guess a sofifaId; if there are no matches, tell the user the player was not found.',
+      inputSchema: {
+        name: z.string().min(2).describe('Player name or partial name (e.g. "Saka", "De Bruyne").'),
+        limit: z.number().int().optional().describe('Max matches to return (default 8, max 15).'),
+      },
+    },
+    async ({ name, limit }) => {
+      const query = name.trim()
+      const take = Math.min(Math.max(limit ?? 8, 1), 15)
+
+      const select = {
+        sofifaId: true,
+        name: true,
+        longName: true,
+        club: true,
+        league: true,
+        positions: true,
+        age: true,
+        ovr: true,
+        potential: true,
+        marketValue: true,
+      } as const
+
+      // Substring match on both name and full name. Fall back to the longest token (usually the
+      // surname) when the full phrase finds nothing — handles "Kevin De Bruyne" vs "De Bruyne".
+      let rows = await prisma.fc26Player.findMany({
+        where: {
+          OR: [
+            { name: { contains: query, mode: 'insensitive' } },
+            { longName: { contains: query, mode: 'insensitive' } },
+          ],
+        },
+        orderBy: { ovr: 'desc' },
+        take,
+        select,
+      })
+
+      if (rows.length === 0) {
+        const token = query.split(/\s+/).sort((a, b) => b.length - a.length)[0]
+        if (token && token.length >= 2 && token !== query) {
+          rows = await prisma.fc26Player.findMany({
+            where: {
+              OR: [
+                { name: { contains: token, mode: 'insensitive' } },
+                { longName: { contains: token, mode: 'insensitive' } },
+              ],
+            },
+            orderBy: { ovr: 'desc' },
+            take,
+            select,
+          })
+        }
+      }
+
+      return jsonResult({
+        query,
+        matches: rows.map((p) => ({
+          name: p.name,
+          longName: p.longName,
+          sofifaId: p.sofifaId,
+          club: p.club,
+          league: p.league,
+          positions: p.positions,
+          age: p.age,
+          ovr: p.ovr,
+          potential: p.potential,
+          marketValue: formatBalance(millions(p.marketValue)),
+        })),
+      })
+    },
+  )
+
   server.registerTool(
     'identify_squad_gaps',
     {
       description:
-        'Use when the user asks about squad weaknesses, missing positions, or wants signing recommendations. Returns gaps grouped by severity for the chosen formation.',
+        'Use when the user asks about squad weaknesses, missing positions, or wants signing recommendations. Returns gaps grouped by severity for the chosen formation. For a richer needs read tied to the playbook objective, prefer analyze_squad_needs.',
       inputSchema: {
         saveId: z.string().optional().describe('Save ID. If omitted, uses the most recent save.'),
         formation: z
@@ -26,37 +104,25 @@ export function registerScoutingTools(server: McpServer, ctx: McpContext) {
       },
     },
     async ({ saveId, formation }) => {
-      const id = await resolveSaveId(ctx.userId, saveId)
-      if (!id) return { content: [{ type: 'text', text: 'Nenhum save encontrado.' }] }
+      const id = await resolveSaveId(ctx.userId, saveId, ctx.saveId)
+      if (!id) return noSaveResult
 
       const gaps = await identifyGaps(ctx.userId, id, { formation })
 
-      if (gaps.length === 0) {
-        return {
-          content: [
-            { type: 'text', text: `Nenhuma lacuna crítica no elenco para a formação ${formation ?? '4-3-3'}.` },
-          ],
-        }
-      }
-
-      const rows = gaps
-        .map(
-          (g) =>
-            `| ${severityEmoji[g.severity]} ${g.severity} | ${g.position} | ${g.count}/${g.ideal} | ${
-              g.avgAge?.toFixed(1) ?? '—'
-            } | ${g.bestOvr ?? '—'} | ${g.reason} |`,
-        )
-        .join('\n')
-
-      const text = [
-        `# Lacunas no elenco — formação ${formation ?? '4-3-3'}`,
-        ``,
-        `| Severidade | Posição | Atual/Ideal | Idade média | Melhor OVR | Motivo |`,
-        `|---|---|---|---|---|---|`,
-        rows,
-      ].join('\n')
-
-      return { content: [{ type: 'text', text }] }
+      return jsonResult({
+        formation: formation ?? '4-3-3',
+        gaps: gaps.map((g) => ({
+          position: g.position,
+          severity: g.severity,
+          count: g.count,
+          ideal: g.ideal,
+          min: g.min,
+          avgAge: g.avgAge,
+          avgOvr: g.avgOvr,
+          bestOvr: g.bestOvr,
+          reason: g.reason,
+        })),
+      })
     },
   )
 
@@ -64,9 +130,9 @@ export function registerScoutingTools(server: McpServer, ctx: McpContext) {
     'search_transfer_targets',
     {
       description:
-        'Use when user wants to find players to sign with specific criteria (position, max age, min overall, max market value). Returns up to 20 FC26 players ranked by overall.',
+        'Use when user wants a plain filtered list of dataset players (position, max age, min overall, max market value), ranked by raw overall — no scoutScore. For an actual signing recommendation prefer recommend_signings. Returns up to 20 FC26 players.',
       inputSchema: {
-        position: z.string().describe('Position code: GOL, ZAG, LD, LE, VOL, MC, ME, MD, MEI, PE, PD, SA, ATA.'),
+        position: POSITION.describe('FC26 position code (GOL, ZAG, LD, LE, VOL, MC, ME, MD, MEI, PE, PD, SA, ATA).'),
         maxAge: z.number().int().optional(),
         minOverall: z.number().int().optional(),
         maxValue: z.number().optional().describe('Max market value in millions of €.'),
@@ -74,30 +140,26 @@ export function registerScoutingTools(server: McpServer, ctx: McpContext) {
       },
     },
     async (opts) => {
-      const result = await searchTransferTargets(ctx.userId, opts)
+      const saveId = opts.saveId ?? ctx.saveId
+      const result = await searchTransferTargets(ctx.userId, { ...opts, saveId })
 
-      if (result.players.length === 0) {
-        return { content: [{ type: 'text', text: 'Nenhum jogador encontrado com esses filtros.' }] }
-      }
+      const players = result.players as Array<(typeof result.players)[number] & { fitScore?: number | null }>
 
-      const rows = result.players
-        .map(
-          (p) =>
-            `| ${p.name} | ${p.positions.join('/')} | ${p.age} | ${p.ovr}/${p.potential} | ${formatBalance(
-              millions(p.marketValue),
-            )} | ${p.club ?? '—'} | ${p.sofifaId} |`,
-        )
-        .join('\n')
-
-      const text = [
-        `# Alvos encontrados (${result.players.length} de ${result.total})`,
-        ``,
-        `| Nome | Posição | Idade | OVR/POT | Valor | Clube | sofifaId |`,
-        `|---|---|---|---|---|---|---|`,
-        rows,
-      ].join('\n')
-
-      return { content: [{ type: 'text', text }] }
+      return jsonResult({
+        total: result.total,
+        returned: players.length,
+        players: players.map((p) => ({
+          name: p.name,
+          positions: p.positions,
+          age: p.age,
+          ovr: p.ovr,
+          potential: p.potential,
+          marketValue: formatBalance(millions(p.marketValue)),
+          club: p.club,
+          fitScore: p.fitScore ?? null,
+          sofifaId: p.sofifaId,
+        })),
+      })
     },
   )
 
@@ -105,61 +167,53 @@ export function registerScoutingTools(server: McpServer, ctx: McpContext) {
     'evaluate_signing_fit',
     {
       description:
-        'Use when user is considering a specific player and wants analysis. Compares cost vs budget and overall vs current squad at that position. Pass sofifaId (from search_transfer_targets results).',
+        'Use when user is considering a specific player and wants analysis. Compares cost vs budget and overall vs current squad at that position, with real alternatives. Pass sofifaId (from recommend_signings / search_transfer_targets results).',
       inputSchema: {
         sofifaId: z.number().int().describe('Player sofifaId (from FC26 dataset).'),
         saveId: z.string().optional().describe('Save ID. If omitted, uses the most recent save.'),
       },
     },
     async ({ sofifaId, saveId }) => {
-      const id = await resolveSaveId(ctx.userId, saveId)
-      if (!id) return { content: [{ type: 'text', text: 'Nenhum save encontrado.' }] }
+      const id = await resolveSaveId(ctx.userId, saveId, ctx.saveId)
+      if (!id) return noSaveResult
 
       const r = await evaluateSigningFit(ctx.userId, id, sofifaId)
-      const verdictEmoji = { strong: '✅', reasonable: '🟡', poor: '🔴' }[r.verdict]
 
-      const text = [
-        `# Avaliação: ${r.player.name} (${r.player.position})`,
-        ``,
-        `**Veredito:** ${verdictEmoji} ${r.verdict.toUpperCase()}`,
-        ``,
-        `## Jogador`,
-        `- OVR/POT: ${r.player.ovr}/${r.player.potential}`,
-        `- Idade: ${r.player.age}`,
-        `- Clube atual: ${r.player.club ?? '—'}`,
-        `- Valor de mercado: ${formatBalance(millions(r.player.marketValue))}`,
-        ``,
-        `## Custo`,
-        `- Orçamento disponível: ${formatBalance(millions(r.costAnalysis.budget))}`,
-        `- Caberia no orçamento: ${r.costAnalysis.affordable ? 'sim' : 'não'}`,
-        r.costAnalysis.pctOfBudget !== null
-          ? `- % do orçamento: ${r.costAnalysis.pctOfBudget.toFixed(1)}%`
-          : '',
-        ``,
-        `## Encaixe`,
-        `- Jogadores na posição: ${r.fitAnalysis.samePositionCount}`,
-        `- Melhor OVR atual: ${r.fitAnalysis.bestSquadOvr ?? '—'}`,
-        `- Idade média atual: ${r.fitAnalysis.avgSquadAge?.toFixed(1) ?? '—'}`,
-        `- ${r.fitAnalysis.note}`,
-        ...(r.alternatives.length
-          ? [
-              ``,
-              `## Alternativas na posição (dentro do orçamento)`,
-              `| Nome | OVR/POT | Idade | Valor | Clube | sofifaId |`,
-              `|---|---|---|---|---|---|`,
-              ...r.alternatives.map(
-                (a) =>
-                  `| ${a.name} | ${a.ovr}/${a.potential} | ${a.age} | ${formatBalance(millions(a.marketValue))} | ${
-                    a.club ?? '—'
-                  } | ${a.sofifaId} |`,
-              ),
-            ]
-          : []),
-      ]
-        .filter(Boolean)
-        .join('\n')
-
-      return { content: [{ type: 'text', text }] }
+      return jsonResult({
+        verdict: r.verdict,
+        player: {
+          name: r.player.name,
+          position: r.player.position,
+          ovr: r.player.ovr,
+          potential: r.player.potential,
+          age: r.player.age,
+          club: r.player.club,
+          marketValue: formatBalance(millions(r.player.marketValue)),
+        },
+        cost: {
+          budget: formatBalance(millions(r.costAnalysis.budget)),
+          affordable: r.costAnalysis.affordable,
+          pctOfBudget: r.costAnalysis.pctOfBudget,
+        },
+        fit: {
+          samePositionCount: r.fitAnalysis.samePositionCount,
+          bestSquadOvr: r.fitAnalysis.bestSquadOvr,
+          avgSquadAge: r.fitAnalysis.avgSquadAge,
+          ovrDelta: r.fitAnalysis.ovrDelta,
+          ageDelta: r.fitAnalysis.ageDelta,
+          note: r.fitAnalysis.note,
+        },
+        alternatives: r.alternatives.map((a) => ({
+          name: a.name,
+          position: a.position,
+          ovr: a.ovr,
+          potential: a.potential,
+          age: a.age,
+          marketValue: formatBalance(millions(a.marketValue)),
+          club: a.club,
+          sofifaId: a.sofifaId,
+        })),
+      })
     },
   )
 }

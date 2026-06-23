@@ -60,6 +60,14 @@ export async function assertConversationAccess(conversationId: string, userId: s
   if (!conv) throw new NotFoundError('Conversation not found')
 }
 
+export async function getConversationSaveId(conversationId: string): Promise<string | null> {
+  const conv = await prisma.chatConversation.findFirst({
+    where: { id: conversationId },
+    select: { saveId: true },
+  })
+  return conv?.saveId ?? null
+}
+
 export async function getLastOpenaiResponseId(conversationId: string): Promise<string | null> {
   const msg = await prisma.chatMessage.findFirst({
     where: { conversationId, role: 'assistant', openaiResponseId: { not: null } },
@@ -67,6 +75,24 @@ export async function getLastOpenaiResponseId(conversationId: string): Promise<s
     orderBy: { createdAt: 'desc' },
   })
   return msg?.openaiResponseId ?? null
+}
+
+/**
+ * Persists a standalone assistant message (no preceding user turn) — used to seed a proactive
+ * opening message when a save-pinned conversation is created. Its `openaiResponseId` becomes the
+ * chain anchor, so the user's first turn continues from it.
+ */
+export async function seedAssistantMessage(
+  conversationId: string,
+  content: string,
+  openaiResponseId: string,
+) {
+  await prisma.$transaction([
+    prisma.chatMessage.create({
+      data: { conversationId, role: 'assistant', content, openaiResponseId },
+    }),
+    prisma.chatConversation.update({ where: { id: conversationId }, data: { updatedAt: new Date() } }),
+  ])
 }
 
 export async function persistTurn(

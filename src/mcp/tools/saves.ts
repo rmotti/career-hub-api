@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { prisma } from '../../shared/lib/prisma.js'
 import { formatBalance, millions } from '../../shared/utils/currency.js'
 import type { McpContext } from '../context.js'
+import { jsonResult } from './helpers.js'
 
 export function registerSavesTools(server: McpServer, ctx: McpContext) {
   server.registerTool(
@@ -18,9 +19,10 @@ export function registerSavesTools(server: McpServer, ctx: McpContext) {
       },
     },
     async ({ saveId }) => {
-      const save = saveId
+      const targetId = saveId ?? ctx.saveId
+      const save = targetId
         ? await prisma.save.findFirst({
-            where: { id: saveId, userId: ctx.userId },
+            where: { id: targetId, userId: ctx.userId },
             include: { clubStints: { where: { isCurrent: true }, take: 1 } },
           })
         : await prisma.save.findFirst({
@@ -64,26 +66,15 @@ export function registerSavesTools(server: McpServer, ctx: McpContext) {
         include: { clubStints: { where: { isCurrent: true }, take: 1 } },
       })
 
-      if (saves.length === 0) {
-        return { content: [{ type: 'text', text: 'Nenhum save encontrado.' }] }
-      }
-
-      const rows = saves
-        .map((s) => {
-          const club = s.clubStints[0]?.club ?? '—'
-          return `| ${s.name} | ${club} | ${s.currentSeason} | ${s.updatedAt.toISOString().slice(0, 10)} | ${s.id} |`
-        })
-        .join('\n')
-
-      const text = [
-        `# Saves do usuário (${saves.length})`,
-        ``,
-        `| Nome | Clube atual | Temporada | Última atividade | ID |`,
-        `|---|---|---|---|---|`,
-        rows,
-      ].join('\n')
-
-      return { content: [{ type: 'text', text }] }
+      return jsonResult({
+        saves: saves.map((s) => ({
+          id: s.id,
+          name: s.name,
+          club: s.clubStints[0]?.club ?? null,
+          season: s.currentSeason,
+          lastPlayed: s.updatedAt.toISOString().slice(0, 10),
+        })),
+      })
     },
   )
 }

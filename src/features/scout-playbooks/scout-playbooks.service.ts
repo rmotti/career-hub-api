@@ -2,7 +2,7 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '../../shared/lib/prisma.js'
 import { AppError, NotFoundError } from '../../shared/utils/errors.js'
 import { assertSaveAccess } from '../../shared/utils/save-access.js'
-import { listFc26Players, type Fc26PlayerFilters, type Fc26PlayerWithFitScore } from '../fc26-players/fc26-players.service.js'
+import { computeFitScoreMap, listFc26Players, type Fc26PlayerFilters, type Fc26PlayerWithFitScore } from '../fc26-players/fc26-players.service.js'
 import { calculateScoutScore, normalizePreferences, normalizeWeights, resolveInlinePlaybook, type ScoutScoreContext } from './scout-score.js'
 import {
   DEFAULT_SCOUT_PLAYBOOK,
@@ -160,6 +160,55 @@ export async function evaluateScoutPlayers(input: ScoutEvaluateInput, userId: st
     playbook,
     players,
   }
+}
+
+/**
+ * Scores a specific set of dataset players (by sofifaId) with the save's playbook + budget +
+ * historical fit — the same engine `evaluateScoutPlayers` uses, but for an explicit id list
+ * instead of a filtered search. Powers the chat `compare_players` tool. Order follows the
+ * `sofifaIds` argument; ids with no dataset row are dropped.
+ */
+export async function scorePlayersBySofifaId(
+  input: { saveId: string; sofifaIds: number[]; playbookId?: string; objective?: string },
+  userId: string,
+) {
+  await assertSaveAccess(input.saveId, userId)
+
+  const playbook = await resolveEvaluationPlaybook({ saveId: input.saveId, playbookId: input.playbookId }, userId)
+  const objective = playbook.preferences.objective ?? input.objective ?? 'balanced'
+
+  const save = await prisma.save.findUnique({ where: { id: input.saveId }, select: { budget: true } })
+  const context: ScoutScoreContext = {
+    marketValueRef: playbook.preferences.maxMarketValue ?? save?.budget ?? null,
+    wageRef: playbook.preferences.maxWage ?? null,
+  }
+
+  const rows = await prisma.fc26Player.findMany({ where: { sofifaId: { in: input.sofifaIds } } })
+
+  const clubStint = await prisma.clubStint.findFirst({
+    where: { saveId: input.saveId, isCurrent: true },
+    select: { club: true },
+  })
+  let scoreMap: Awaited<ReturnType<typeof computeFitScoreMap>> = new Map()
+  if (clubStint) scoreMap = await computeFitScoreMap(rows, clubStint.club, objective)
+
+  // Preserve the caller's id order so the comparison reads in the order the user asked.
+  const byId = new Map(rows.map((p) => [p.sofifaId, p]))
+  const players = input.sofifaIds
+    .map((id) => byId.get(id))
+    .filter((p): p is (typeof rows)[number] => p !== undefined)
+    .map((p) => {
+      const fit = scoreMap.get(p.sofifaId)
+      const withFit = normalizePlayerFitFields({
+        ...p,
+        fitScore: fit?.fit_score ?? null,
+        fitConfidence: fit?.confidence ?? null,
+        fitProfileSize: fit?.profile_size ?? null,
+      })
+      return { ...withFit, ...calculateScoutScore(withFit, playbook, context) }
+    })
+
+  return { playbook, objective, players }
 }
 
 async function resolveEvaluationPlaybook(input: ScoutEvaluateInput, userId: string): Promise<ResolvedScoutPlaybook> {

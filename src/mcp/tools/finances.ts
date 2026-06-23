@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { prisma } from '../../shared/lib/prisma.js'
 import { formatBalance, formatSalary, millions, thousands } from '../../shared/utils/currency.js'
 import type { McpContext } from '../context.js'
+import { jsonResult } from './helpers.js'
 
 export function registerFinancesTools(server: McpServer, ctx: McpContext) {
   server.registerTool(
@@ -18,9 +19,10 @@ export function registerFinancesTools(server: McpServer, ctx: McpContext) {
       },
     },
     async ({ saveId }) => {
-      const save = saveId
+      const targetId = saveId ?? ctx.saveId
+      const save = targetId
         ? await prisma.save.findFirst({
-            where: { id: saveId, userId: ctx.userId },
+            where: { id: targetId, userId: ctx.userId },
             include: { clubStints: { where: { isCurrent: true }, take: 1 } },
           })
         : await prisma.save.findFirst({
@@ -45,20 +47,15 @@ export function registerFinancesTools(server: McpServer, ctx: McpContext) {
       const totalWageBill = wageAgg?._sum.salary ?? null
       const squadSize = wageAgg?._count ?? 0
 
-      const text = [
-        `# Finanças — ${save.name}`,
-        ``,
-        `**Clube atual:** ${stint?.club ?? '—'}  ·  **Temporada:** ${save.currentSeason}`,
-        ``,
-        `| Item | Valor |`,
-        `|---|---|`,
-        `| Orçamento de transferências | ${formatBalance(millions(save.budget))} |`,
-        `| Saldo do clube | ${formatBalance(millions(save.balance))} |`,
-        `| Folha salarial total (mensal) | ${formatSalary(thousands(totalWageBill))} |`,
-        `| Jogadores no elenco | ${squadSize} |`,
-      ].join('\n')
-
-      return { content: [{ type: 'text', text }] }
+      return jsonResult({
+        save: save.name,
+        club: stint?.club ?? null,
+        season: save.currentSeason,
+        transferBudget: formatBalance(millions(save.budget)),
+        clubBalance: formatBalance(millions(save.balance)),
+        totalWageBill: formatSalary(thousands(totalWageBill)),
+        squadSize,
+      })
     },
   )
 }

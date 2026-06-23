@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { prisma } from '../../shared/lib/prisma.js'
 import type { McpContext } from '../context.js'
 import { resolveSaveId } from '../utils.js'
+import { jsonResult, textResult } from './helpers.js'
 
 export function registerPerformanceTools(server: McpServer, ctx: McpContext) {
   server.registerTool(
@@ -16,18 +17,18 @@ export function registerPerformanceTools(server: McpServer, ctx: McpContext) {
       },
     },
     async ({ saveId, season }) => {
-      const id = await resolveSaveId(ctx.userId, saveId)
-      if (!id) return { content: [{ type: 'text', text: 'Nenhum save encontrado.' }] }
+      const id = await resolveSaveId(ctx.userId, saveId, ctx.saveId)
+      if (!id) return textResult('No save found.')
 
       const save = await prisma.save.findFirst({
         where: { id, userId: ctx.userId },
         include: { clubStints: { where: { isCurrent: true }, take: 1 } },
       })
-      if (!save) return { content: [{ type: 'text', text: 'Save não encontrado.' }] }
+      if (!save) return textResult('Save not found.')
 
       const stint = save.clubStints[0]
       if (!stint) {
-        return { content: [{ type: 'text', text: 'Esta save não tem um clube ativo.' }] }
+        return textResult('This save has no active club.')
       }
 
       const targetSeason = season ?? save.currentSeason
@@ -51,59 +52,43 @@ export function registerPerformanceTools(server: McpServer, ctx: McpContext) {
         }),
       ])
 
-      const out = [`# Temporada ${targetSeason} — ${stint.club}`, '']
+      if (teamStats.length === 0 && topScorers.length === 0 && topAssisters.length === 0) {
+        return textResult(`No stats recorded for season ${targetSeason}.`)
+      }
 
-      if (teamStats.length === 0) {
-        out.push('_Sem estatísticas de equipe registradas para esta temporada._', '')
-      } else {
-        out.push('## Resultados por competição')
-        out.push('')
-        out.push('| Competição | V | E | D | GP | GC | Posição/Resultado |')
-        out.push('|---|---|---|---|---|---|---|')
-        for (const t of teamStats) {
-          const competition = t.competition?.name ?? 'Geral'
-          const result =
+      return jsonResult({
+        season: targetSeason,
+        club: stint.club,
+        competitions: teamStats.map((t) => ({
+          competition: t.competition?.name ?? 'Overall',
+          type: t.competition?.type ?? null,
+          wins: t.wins,
+          draws: t.draws,
+          losses: t.losses,
+          goalsFor: t.goalsPro,
+          goalsAgainst: t.goalsAgainst,
+          result:
             t.competition?.type === 'League'
               ? t.leaguePosition !== null
                 ? `${t.leaguePosition}º`
-                : '—'
-              : t.cupResult ?? '—'
-          out.push(`| ${competition} | ${t.wins} | ${t.draws} | ${t.losses} | ${t.goalsPro} | ${t.goalsAgainst} | ${result} |`)
-        }
-        out.push('')
-      }
-
-      if (topScorers.length > 0) {
-        out.push('## Top artilheiros')
-        out.push('')
-        out.push('| Jogador | Pos | J | G | A |')
-        out.push('|---|---|---|---|---|')
-        for (const s of topScorers) {
-          out.push(`| ${s.player.name} | ${s.player.position} | ${s.matches} | ${s.goals} | ${s.assists} |`)
-        }
-        out.push('')
-      }
-
-      if (topAssisters.length > 0) {
-        out.push('## Top assistentes')
-        out.push('')
-        out.push('| Jogador | Pos | J | A | G |')
-        out.push('|---|---|---|---|---|')
-        for (const a of topAssisters) {
-          out.push(`| ${a.player.name} | ${a.player.position} | ${a.matches} | ${a.assists} | ${a.goals} |`)
-        }
-        out.push('')
-      }
-
-      if (teamStats.length === 0 && topScorers.length === 0 && topAssisters.length === 0) {
-        return {
-          content: [
-            { type: 'text', text: `Nenhuma estatística registrada para a temporada ${targetSeason}.` },
-          ],
-        }
-      }
-
-      return { content: [{ type: 'text', text: out.join('\n') }] }
+                : null
+              : t.cupResult ?? null,
+        })),
+        topScorers: topScorers.map((s) => ({
+          name: s.player.name,
+          position: s.player.position,
+          matches: s.matches,
+          goals: s.goals,
+          assists: s.assists,
+        })),
+        topAssisters: topAssisters.map((a) => ({
+          name: a.player.name,
+          position: a.player.position,
+          matches: a.matches,
+          assists: a.assists,
+          goals: a.goals,
+        })),
+      })
     },
   )
 }

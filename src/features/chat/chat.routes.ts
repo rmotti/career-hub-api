@@ -23,6 +23,38 @@ const messageSchema = {
   },
 }
 
+// Create returns the conversation plus an optional proactive opening message (save-pinned only).
+const createConversationResponseSchema = {
+  type: 'object',
+  properties: {
+    ...conversationSchema.properties,
+    openingMessage: {
+      type: 'object',
+      nullable: true,
+      properties: {
+        role: { type: 'string' },
+        content: { type: 'string' },
+      },
+    },
+  },
+}
+
+const sendMessageBodySchema = {
+  type: 'object',
+  required: ['message'],
+  properties: {
+    message: { type: 'string', minLength: 1 },
+    previousResponseId: {
+      type: 'string',
+      description: 'OpenAI Responses API previous response ID (ignored when conversationId is set)',
+    },
+    conversationId: {
+      type: 'string',
+      description: 'Persist this turn in an existing conversation and auto-derive context',
+    },
+  },
+}
+
 export async function chatRoutes(app: FastifyInstance) {
   app.post<{ Body: { message: string; previousResponseId?: string; conversationId?: string } }>(
     '/chat/messages',
@@ -30,33 +62,34 @@ export async function chatRoutes(app: FastifyInstance) {
       schema: {
         tags: ['Chat'],
         summary: 'Send a message to the coach',
-        body: {
-          type: 'object',
-          required: ['message'],
-          properties: {
-            message: { type: 'string', minLength: 1 },
-            previousResponseId: {
-              type: 'string',
-              description: 'OpenAI Responses API previous response ID (ignored when conversationId is set)',
-            },
-            conversationId: {
-              type: 'string',
-              description: 'Persist this turn in an existing conversation and auto-derive context',
-            },
-          },
-        },
+        body: sendMessageBodySchema,
         response: {
           200: {
             type: 'object',
             properties: {
               reply: { type: 'string' },
               responseId: { type: 'string' },
+              suggestions: { type: 'array', items: { type: 'string' } },
             },
           },
         },
       },
     },
     chatController.sendMessage,
+  )
+
+  app.post<{ Body: { message: string; previousResponseId?: string; conversationId?: string } }>(
+    '/chat/messages/stream',
+    {
+      schema: {
+        tags: ['Chat'],
+        summary: 'Stream a message to the coach (Server-Sent Events)',
+        description:
+          'Same input as POST /chat/messages but streams the reply over SSE. Events: `delta` ({ delta }), `done` ({ responseId, suggestions }), `error` ({ message }).',
+        body: sendMessageBodySchema,
+      },
+    },
+    chatController.sendMessageStream,
   )
 
   app.post<{ Body: { title?: string; saveId?: string } }>(
@@ -72,7 +105,7 @@ export async function chatRoutes(app: FastifyInstance) {
             saveId: { type: 'string' },
           },
         },
-        response: { 201: conversationSchema },
+        response: { 201: createConversationResponseSchema },
       },
     },
     chatController.createConversation,
