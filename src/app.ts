@@ -27,6 +27,7 @@ import { mcpPlugin } from './mcp/plugin.js'
 import { getTrustedOrigins, isCredentialedOriginAllowed } from './shared/utils/origins.js'
 import { httpRequestStarted, httpRequestFinished, recordHttpRequest } from './shared/lib/metrics.js'
 import { isTransientDbError } from './shared/lib/db-retry.js'
+import { registerRequestTiming } from './shared/lib/request-timing.js' // TEMP diagnostic (#perf-investigation)
 
 export const app = Fastify({
   logger: {
@@ -42,6 +43,9 @@ export const app = Fastify({
     },
   },
 })
+
+// TEMP diagnostic (#perf-investigation): per-phase timing for any request > 500ms. Remove later.
+registerRequestTiming(app, { thresholdMs: 500 })
 
 const trustedOrigins = getTrustedOrigins()
 
