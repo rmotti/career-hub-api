@@ -119,9 +119,10 @@ export function registerScoutingTools(server: McpServer, ctx: McpContext) {
           count: g.count,
           ideal: g.ideal,
           min: g.min,
-          avgAge: g.avgAge,
-          avgOvr: g.avgOvr,
-          bestOvr: g.bestOvr,
+          starterOvr: g.starterOvr,
+          starterAge: g.starterAge,
+          benchOvr: g.benchOvr,
+          coveredBySecondaryOnly: g.coveredBySecondaryOnly,
           reason: g.reason,
         })),
       })

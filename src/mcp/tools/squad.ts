@@ -1,7 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import type { Position } from '@prisma/client'
 import { z } from 'zod'
-import { FORMATION_NAMES } from '../../features/scouting/formations.js'
+import { FORMATION_NAMES, getFormation } from '../../features/scouting/formations.js'
 import { identifyGaps } from '../../features/scouting/scouting.service.js'
 import { prisma } from '../../shared/lib/prisma.js'
 import { formatMarketValue, formatSalary, millions, thousands } from '../../shared/utils/currency.js'
@@ -34,6 +34,7 @@ type SquadPlayer = {
   salary: number | null
   marketValue: number | null
   shirtNumber: number | null
+  alternativePosition: { positions?: Position[] } | null
 }
 
 type LoadedSquad =
@@ -63,6 +64,7 @@ async function loadActiveSquad(userId: string, saveId: string): Promise<LoadedSq
       salary: true,
       marketValue: true,
       shirtNumber: true,
+      alternativePosition: true,
     },
   })) as SquadPlayer[]
 
@@ -151,41 +153,62 @@ export function registerSquadTools(server: McpServer, ctx: McpContext) {
         resolveObjective(id),
       ])
 
-      const squadAvgOvr = avg(players.map((p) => p.ovr))
+      // Squad "level" = the best player in the squad, NOT an average. The whole read is starter-first:
+      // for each position the highest OVR is the presumed starter; depth/quality is judged off that
+      // and the drop-off to the backup — never a positional average (a single veteran or a 60-OVR
+      // youth would skew a mean and hide the real picture).
+      const squadBestOvr = players.length ? Math.max(...players.map((p) => p.ovr)) : null
 
       const out = [
         `Squad needs — ${club} · formation ${formation ?? '4-3-3'} · objective "${objective}"`,
         `Lens: ${OBJECTIVE_LENS[objective] ?? OBJECTIVE_LENS.balanced}`,
-        `Squad-wide avg OVR ${squadAvgOvr?.toFixed(0) ?? '—'} across ${players.length} players.`,
+        `Squad benchmark: best player OVR ${squadBestOvr ?? '—'} across ${players.length} players (starter = top OVR per position).`,
         '',
       ]
 
+      // Options at a position = specialists (primary) + cover (players whose alternativePosition
+      // lists it). Both count at full OVR; we tag cover so the read can say "no specialist, covered
+      // by X" instead of flagging a phantom gap (e.g. an LM who also plays LB covers the LB slot).
+      const formationPositions = new Set(Object.keys(getFormation(formation).positions) as Position[])
+
+      type Option = { name: string; age: number; ovr: number; specialist: boolean }
+      const optionsAt = (pos: Position): Option[] => {
+        const opts: Option[] = []
+        for (const p of players) {
+          if (p.position === pos) opts.push({ name: p.name, age: p.age, ovr: p.ovr, specialist: true })
+          else if (p.alternativePosition?.positions?.includes(pos))
+            opts.push({ name: p.name, age: p.age, ovr: p.ovr, specialist: false })
+        }
+        return opts.sort((a, b) => b.ovr - a.ovr)
+      }
+
       for (const sector of SECTORS) {
         const inSector = players.filter((p) => sector.positions.includes(p.position))
-        const avgOvr = avg(inSector.map((p) => p.ovr))
-        const avgAge = avg(inSector.map((p) => p.age))
-        const avgPot = avg(inSector.map((p) => p.potential ?? p.ovr))
-        const bestOvr = inSector.length ? Math.max(...inSector.map((p) => p.ovr)) : null
-        const sectorGaps = gaps.filter((g) => sector.positions.includes(g.position))
+        out.push(`${sector.label} (${inSector.length})`)
 
-        const tags: string[] = []
-        if (sectorGaps.some((g) => g.severity === 'critical')) tags.push('THIN DEPTH')
-        if (avgAge !== null && avgAge >= 30) tags.push('AGING')
-        if (squadAvgOvr !== null && avgOvr !== null && avgOvr <= squadAvgOvr - 3) tags.push('QUALITY GAP')
-        if ((objective === 'youth' || objective === 'rebuild') && avgPot !== null && bestOvr !== null && avgPot - bestOvr < 2) {
-          tags.push('LOW UPSIDE')
+        // Report per position the formation actually uses in this sector, starter-first, with cover.
+        const sectorFormationPositions = sector.positions.filter((pos) => formationPositions.has(pos))
+        for (const pos of sectorFormationPositions) {
+          const ranked = optionsAt(pos)
+          if (ranked.length === 0) continue // a true empty slot — surfaced as a gap below
+          const starter = ranked[0]
+          const bench = ranked[1] ?? null
+          const starterTag = starter.specialist ? '' : ` — cover (no specialist ${positionLabel(pos)})`
+          const benchStr = bench ? `, backup ${bench.ovr}${bench.specialist ? '' : ' (cover)'}` : ', no backup'
+          out.push(
+            `    ${positionLabel(pos)} (${ranked.length}) — starter ${starter.name} OVR ${starter.ovr}, ${starter.age}y${starterTag}${benchStr}`,
+          )
         }
 
-        out.push(
-          `${sector.label} (${inSector.length}) — avg OVR ${avgOvr?.toFixed(0) ?? '—'}, avg age ${avgAge?.toFixed(1) ?? '—'}, best OVR ${bestOvr ?? '—'}${tags.length ? ` · ${tags.join(', ')}` : ' · ok'}`,
-        )
+        // Gaps for this sector come from identifyGaps (already starter/bench-based, cover-aware).
+        const sectorGaps = gaps.filter((g) => sector.positions.includes(g.position))
         for (const g of sectorGaps) {
           out.push(`    gap: [${g.severity}] ${positionLabel(g.position)} ${g.count}/${g.ideal} — ${g.reason}`)
         }
       }
 
       out.push('')
-      out.push('Next: pick the most pressing sector, call get_club_archetype for its DNA, then recommend_signings to get scored targets.')
+      out.push('Next: pick the most pressing position, call get_club_archetype for its DNA, then recommend_signings to get scored targets.')
 
       return textResult(out.join('\n'))
     },

@@ -17,11 +17,25 @@ export type Gap = {
   count: number
   ideal: number
   min: number
-  avgAge: number | null
-  avgOvr: number | null
-  bestOvr: number | null
+  /** The presumed starter = highest OVR available at the position. Quality is judged off this, never an average. */
+  starterOvr: number | null
+  /** Age of that starter (not a positional average — avoids a single veteran dragging the read). */
+  starterAge: number | null
+  /** Second-highest OVR available at the position. A big starter→bench drop-off is a depth-quality gap. */
+  benchOvr: number | null
+  /**
+   * True when the position has NO specialist (primary-position) player and is covered only by
+   * players whose primary position is elsewhere (via alternativePosition). Not a gap on its own —
+   * the bot should mention the cover rather than recommend a signing.
+   */
+  coveredBySecondaryOnly: boolean
   reason: string
 }
+
+/** A starter sitting this many OVR below the squad's best player reads as below the club's level. */
+const STARTER_BELOW_SQUAD_THRESHOLD = 6
+/** A second-choice this many OVR below the starter reads as a thin/weak bench at that position. */
+const BENCH_DROPOFF_THRESHOLD = 6
 
 async function getActiveStint(userId: string, saveId: string) {
   const save = await prisma.save.findFirst({
@@ -44,46 +58,79 @@ export async function identifyGaps(
 
   const squad = await prisma.player.findMany({
     where: { saveId, activeClubStintId: stint.id },
-    select: { position: true, age: true, ovr: true },
+    select: { position: true, age: true, ovr: true, alternativePosition: true },
   })
 
-  const byPosition = new Map<Position, { ages: number[]; ovrs: number[] }>()
-  for (const p of squad) {
-    if (!byPosition.has(p.position)) byPosition.set(p.position, { ages: [], ovrs: [] })
-    const bucket = byPosition.get(p.position)!
-    bucket.ages.push(p.age)
-    bucket.ovrs.push(p.ovr)
+  // An option at a position is either a specialist (it's their primary position) or cover (a
+  // secondary/alternative position). Both count at full OVR — a multi-position player plays the
+  // role at his real level — but we track which so the read can say "covered by X, no specialist".
+  type Option = { age: number; ovr: number; specialist: boolean }
+  const byPosition = new Map<Position, Option[]>()
+  const addOption = (pos: Position, opt: Option) => {
+    if (!byPosition.has(pos)) byPosition.set(pos, [])
+    byPosition.get(pos)!.push(opt)
   }
+  for (const p of squad) {
+    addOption(p.position, { age: p.age, ovr: p.ovr, specialist: true })
+    const alt = (p.alternativePosition as { positions?: Position[] } | null)?.positions ?? []
+    for (const altPos of alt) addOption(altPos, { age: p.age, ovr: p.ovr, specialist: false })
+  }
+  // Sort each position by OVR desc so [0] = starter, [1] = first backup (specialist or cover).
+  for (const options of byPosition.values()) options.sort((a, b) => b.ovr - a.ovr)
+
+  // Club level baseline = the best player in the whole squad. A position whose starter sits well
+  // below this is a quality gap relative to the team, regardless of how the position averages out.
+  const squadBestOvr = squad.length ? Math.max(...squad.map((p) => p.ovr)) : null
 
   const gaps: Gap[] = []
 
   for (const [pos, req] of Object.entries(formation.positions) as [Position, { ideal: number; min: number }][]) {
-    const bucket = byPosition.get(pos) ?? { ages: [], ovrs: [] }
-    const count = bucket.ages.length
-    const avgAge = count ? bucket.ages.reduce((a, b) => a + b, 0) / count : null
-    const avgOvr = count ? bucket.ovrs.reduce((a, b) => a + b, 0) / count : null
-    const bestOvr = count ? Math.max(...bucket.ovrs) : null
+    const options = byPosition.get(pos) ?? []
+    const count = options.length // specialists + secondary-position cover, all at full OVR
+    const specialistCount = options.filter((o) => o.specialist).length
+    const starter = options[0] ?? null // highest OVR available = presumed starter (may be cover)
+    const starterOvr = starter?.ovr ?? null
+    const starterAge = starter?.age ?? null
+    const benchOvr = options[1]?.ovr ?? null // second-best = first backup
+    // No dedicated player at all, but a player from another position can fill in. We don't treat
+    // this as a gap (the cover exists) — the squad-needs tool mentions it instead of recommending.
+    const coveredBySecondaryOnly = specialistCount === 0 && count > 0
 
     let severity: GapSeverity
     let reason: string
 
+    const starterBelowSquad =
+      starterOvr !== null && squadBestOvr !== null && squadBestOvr - starterOvr >= STARTER_BELOW_SQUAD_THRESHOLD
+    const benchDropoff = starterOvr !== null && benchOvr !== null && starterOvr - benchOvr >= BENCH_DROPOFF_THRESHOLD
+
     if (count < req.min) {
       severity = 'critical'
-      reason = `Só ${count} jogador(es) na posição ${pos}, mínimo é ${req.min}.`
+      reason = `Só ${count} opção(ões) na posição ${pos}, mínimo é ${req.min}.`
     } else if (count < req.ideal) {
       severity = 'moderate'
-      reason = `${count} jogador(es) na posição ${pos}, ideal é ${req.ideal}.`
-    } else if (avgAge !== null && avgAge >= 31) {
+      reason = `${count} opção(ões) na posição ${pos}, ideal é ${req.ideal}.`
+    } else if (starterBelowSquad) {
+      // Titular abaixo do nível do elenco: o melhor jogador da posição fica muito atrás do
+      // melhor do time. Vale reforçar para subir o teto da posição.
       severity = 'moderate'
-      reason = `Idade média alta em ${pos}: ${avgAge.toFixed(1)} anos.`
-    } else if (bestOvr !== null && bestOvr < 75) {
+      reason = `Titular em ${pos} (OVR ${starterOvr}) está ${squadBestOvr! - starterOvr!} abaixo do melhor do elenco (${squadBestOvr}).`
+    } else if (starterAge !== null && starterAge >= 31) {
+      severity = 'moderate'
+      reason = `Titular em ${pos} tem ${starterAge} anos — candidato a renovação.`
+    } else if (benchDropoff) {
+      // Banco fraco: o reserva imediato cai muito abaixo do titular. Exposto a lesão/rodízio.
       severity = 'low'
-      reason = `Melhor jogador em ${pos} tem só ${bestOvr} de overall.`
+      reason = `Banco fraco em ${pos}: reserva (OVR ${benchOvr}) está ${starterOvr! - benchOvr!} abaixo do titular (${starterOvr}).`
+    } else if (starterOvr !== null && starterOvr < 75) {
+      severity = 'low'
+      reason = `Titular em ${pos} tem só ${starterOvr} de overall.`
     } else {
+      // Adequately staffed and good quality. If it's only covered by a non-specialist, the tool
+      // will note that, but it's not a need — don't emit a gap.
       continue
     }
 
-    gaps.push({ position: pos, severity, count, ideal: req.ideal, min: req.min, avgAge, avgOvr, bestOvr, reason })
+    gaps.push({ position: pos, severity, count, ideal: req.ideal, min: req.min, starterOvr, starterAge, benchOvr, coveredBySecondaryOnly, reason })
   }
 
   const severityOrder: Record<GapSeverity, number> = { critical: 0, moderate: 1, low: 2 }

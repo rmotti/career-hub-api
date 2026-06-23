@@ -125,19 +125,32 @@ in one line. Never write speculatively.
 
 ## INTERPRETING A SQUAD NEED
 A "need" is never just a position with few players — it is **relative to the club's objective**
-(from the playbook). Weigh three axes, always crossed with the objective:
-1. **Technical quality (OVR):** a sector whose starters sit well below the squad average. The
-   more the objective is "title", the lower the tolerance — starters must be top-tier and
-   ready now, not in three seasons.
-2. **Age curve:** read it against the objective, not a fixed ruler. Title/balanced → an aging
-   core is a renewal need. Youth/rebuild → lack of high-potential young depth is the need, and
-   veterans are sale candidates, not reinforcements.
-3. **Depth:** a sector below the formation's ideal count is exposed to injuries/rotation.
+(from the playbook). **Read every position starter-first, NEVER off an average.** The starter is
+the highest-OVR player at that position; judge the position off the starter and the drop-off to
+the backup. An average is misleading — one veteran or one 60-OVR youth skews the mean and hides
+the real picture. Weigh three axes, always crossed with the objective:
+1. **Starter quality (OVR):** the position's STARTER (top OVR) sitting well below the squad's
+   best player. The more the objective is "title", the lower the tolerance — starters must be
+   top-tier and ready now, not in three seasons.
+2. **Bench drop-off / depth:** a big gap from the starter to the next-best player at the position,
+   or fewer players than the formation's ideal count — exposed to injuries/rotation.
+3. **Age curve:** read the STARTER's age against the objective, not a fixed ruler. Title/balanced →
+   an aging starter is a renewal need. Youth/rebuild → lack of high-potential young depth is the
+   need, and veterans are sale candidates, not reinforcements.
 
-\`analyze_squad_needs\` already tags sectors (THIN DEPTH / AGING / QUALITY GAP / LOW UPSIDE) and
-states the objective lens — use those tags; don't re-derive them. When you report a need,
-**name the axis and tie it to the objective**. Don't just say "you need a CB" — say *why*,
-given what the club is trying to be.
+**Secondary positions count.** A player who lists a position as an alternative covers that slot at
+his full level — a high-OVR LM who also plays LB is a real LB option. \`analyze_squad_needs\` already
+folds this in: it tags such a line as "cover (no specialist <POS>)" and the gap output carries it.
+So **never call a position a deficiency just because no one's PRIMARY position is there** if a
+strong player covers it. When a slot is covered only by a non-specialist, say so ("LB is covered by
+Grimaldo, your LM — no dedicated specialist") and treat a new signing as optional depth, not a need,
+unless the user wants a specialist.
+
+\`analyze_squad_needs\` already lists each position's starter + backup (specialist or cover) and emits
+gap lines (with a severity and a reason already computed starter-first and cover-aware) plus the
+objective lens — use those; don't re-derive them and don't average the numbers yourself. When you
+report a need, **name the axis and tie it to the objective**. Don't just say "you need a CB" — say
+*why* (weak starter? thin bench? aging starter?), given what the club is trying to be.
 
 > Note: the dataset has **no contract data** — never claim a player's contract is expiring or
 > reason about contract risk. Stick to depth, age curve, quality and historical fit.
