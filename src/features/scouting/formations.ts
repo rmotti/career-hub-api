@@ -247,3 +247,27 @@ export function getFormation(name: string | undefined): Formation {
   if (!name) return FORMATION_REQUIREMENTS['4-3-3']
   return FORMATION_REQUIREMENTS[name] ?? FORMATION_REQUIREMENTS['4-3-3']
 }
+
+/**
+ * Resolve a user/model-supplied formation string to a canonical FORMATION_NAMES key.
+ * The chat surface speaks shapes as "3421", "3-4-2-1", "352" etc., but the formation table is
+ * keyed by the hyphenated form — without this, "3421" fails the tool enum and surfaces as an
+ * opaque tool error. We canonicalise by stripping non-digits and matching against each known
+ * formation's digit string, so any separator (hyphen, space, none) resolves the same shape.
+ * Returns the canonical name, or undefined if the digits match no supported formation.
+ */
+export function normalizeFormation(input: string | undefined): string | undefined {
+  if (!input) return undefined
+
+  // Exact (case-insensitive) name match first, so named variants that share a digit string with a
+  // plainer shape stay reachable (e.g. "4-4-2 Diamante" vs "4-4-2" — both strip to "442").
+  const trimmed = input.trim().toLowerCase()
+  const exact = FORMATION_NAMES.find((name) => name.toLowerCase() === trimmed)
+  if (exact) return exact
+
+  // Otherwise match on the bare digit string, so any separator ("3421", "3 4 2 1") resolves. When
+  // several shapes share a digit string, the first registered (the plain variant) wins.
+  const digits = input.replace(/\D/g, '')
+  if (!digits) return undefined
+  return FORMATION_NAMES.find((name) => name.replace(/\D/g, '') === digits)
+}

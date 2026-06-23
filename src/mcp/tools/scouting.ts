@@ -7,7 +7,7 @@ import {
 } from '../../features/scouting/scouting.service.js'
 import { prisma } from '../../shared/lib/prisma.js'
 import { formatBalance, millions } from '../../shared/utils/currency.js'
-import { FORMATION_NAMES } from '../../features/scouting/formations.js'
+import { FORMATION_NAMES, normalizeFormation } from '../../features/scouting/formations.js'
 import { positionLabel, positionLabels } from '../../shared/utils/positions.js'
 import type { McpContext } from '../context.js'
 import { resolveSaveId } from '../utils.js'
@@ -100,12 +100,16 @@ export function registerScoutingTools(server: McpServer, ctx: McpContext) {
       inputSchema: {
         saveId: z.string().optional().describe('Save ID. If omitted, uses the most recent save.'),
         formation: z
-          .enum(FORMATION_NAMES)
+          .string()
           .optional()
-          .describe('Formation to evaluate against. Default: 4-3-3.'),
+          .describe('Formation to evaluate against, any separator ("3-4-2-1", "3421", "352"). Default: 4-3-3.'),
       },
     },
-    async ({ saveId, formation }) => {
+    async ({ saveId, formation: rawFormation }) => {
+      const formation = normalizeFormation(rawFormation)
+      if (rawFormation && !formation) {
+        return jsonResult({ error: `Unsupported formation "${rawFormation}". Supported: ${FORMATION_NAMES.join(', ')}.` })
+      }
       const id = await resolveSaveId(ctx.userId, saveId, ctx.saveId)
       if (!id) return noSaveResult
 

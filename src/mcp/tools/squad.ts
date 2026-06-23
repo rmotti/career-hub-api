@@ -1,7 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import type { Position } from '@prisma/client'
 import { z } from 'zod'
-import { FORMATION_NAMES, getFormation } from '../../features/scouting/formations.js'
+import { FORMATION_NAMES, getFormation, normalizeFormation } from '../../features/scouting/formations.js'
 import { identifyGaps } from '../../features/scouting/scouting.service.js'
 import { prisma } from '../../shared/lib/prisma.js'
 import { formatMarketValue, formatSalary, millions, thousands } from '../../shared/utils/currency.js'
@@ -133,13 +133,17 @@ export function registerSquadTools(server: McpServer, ctx: McpContext) {
         'PRIMARY tool for "what does my squad need". One call returns a needs analysis for the active club: per-sector depth and average OVR/age/potential, the formation gaps (count vs ideal, aging, weak), and the active playbook objective with a strategic lens. Use this before recommend_signings so the recommendation targets a real need. Cross-reference its output with get_club_archetype and recommend_signings.',
       inputSchema: {
         formation: z
-          .enum(FORMATION_NAMES)
+          .string()
           .optional()
-          .describe('Formation to evaluate depth against. Default 4-3-3. Three/five-at-the-back shapes (e.g. 3-4-2-1) have no full-backs and model wing-backs as LM/RM.'),
+          .describe('Formation to evaluate depth against, any separator ("3-4-2-1", "3421", "352"). Default 4-3-3. Three/five-at-the-back shapes have no full-backs and model wing-backs as LM/RM.'),
         saveId: z.string().optional(),
       },
     },
-    async ({ formation, saveId }) => {
+    async ({ formation: rawFormation, saveId }) => {
+      const formation = normalizeFormation(rawFormation)
+      if (rawFormation && !formation) {
+        return textResult(`Unsupported formation "${rawFormation}". Supported: ${FORMATION_NAMES.join(', ')}.`)
+      }
       const id = await resolveSaveId(ctx.userId, saveId, ctx.saveId)
       if (!id) return noSaveResult
 
