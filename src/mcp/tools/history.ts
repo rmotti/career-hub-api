@@ -5,6 +5,7 @@ import { listTrophies } from '../../features/trophies/trophies.service.js'
 import { prisma } from '../../shared/lib/prisma.js'
 import { assertSaveAccess } from '../../shared/utils/save-access.js'
 import { formatMarketValue, millions } from '../../shared/utils/currency.js'
+import { positionLabel } from '../../shared/utils/positions.js'
 import type { McpContext } from '../context.js'
 import { resolveSaveId } from '../utils.js'
 import { jsonResult, noSaveResult, textResult } from './helpers.js'
@@ -67,7 +68,7 @@ export function registerHistoryTools(server: McpServer, ctx: McpContext) {
       return jsonResult({
         player: {
           name: player.name,
-          position: player.position,
+          position: positionLabel(player.position),
           age: player.age,
           ovr: player.ovr,
           potential: player.potential,
@@ -144,7 +145,7 @@ export function registerHistoryTools(server: McpServer, ctx: McpContext) {
         season: save.currentSeason,
         loanees: spells.map((s) => ({
           name: s.player.name,
-          position: s.player.position,
+          position: positionLabel(s.player.position),
           ovr: s.player.ovr,
           age: s.player.age,
           loanClub: s.loanClub,

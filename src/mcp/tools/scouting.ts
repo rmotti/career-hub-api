@@ -7,6 +7,8 @@ import {
 } from '../../features/scouting/scouting.service.js'
 import { prisma } from '../../shared/lib/prisma.js'
 import { formatBalance, millions } from '../../shared/utils/currency.js'
+import { FORMATION_NAMES } from '../../features/scouting/formations.js'
+import { positionLabel, positionLabels } from '../../shared/utils/positions.js'
 import type { McpContext } from '../context.js'
 import { resolveSaveId } from '../utils.js'
 import { jsonResult, noSaveResult } from './helpers.js'
@@ -80,7 +82,7 @@ export function registerScoutingTools(server: McpServer, ctx: McpContext) {
           sofifaId: p.sofifaId,
           club: p.club,
           league: p.league,
-          positions: p.positions,
+          positions: positionLabels(p.positions),
           age: p.age,
           ovr: p.ovr,
           potential: p.potential,
@@ -98,7 +100,7 @@ export function registerScoutingTools(server: McpServer, ctx: McpContext) {
       inputSchema: {
         saveId: z.string().optional().describe('Save ID. If omitted, uses the most recent save.'),
         formation: z
-          .enum(['4-3-3', '4-2-3-1'])
+          .enum(FORMATION_NAMES)
           .optional()
           .describe('Formation to evaluate against. Default: 4-3-3.'),
       },
@@ -112,7 +114,7 @@ export function registerScoutingTools(server: McpServer, ctx: McpContext) {
       return jsonResult({
         formation: formation ?? '4-3-3',
         gaps: gaps.map((g) => ({
-          position: g.position,
+          position: positionLabel(g.position),
           severity: g.severity,
           count: g.count,
           ideal: g.ideal,
@@ -150,7 +152,7 @@ export function registerScoutingTools(server: McpServer, ctx: McpContext) {
         returned: players.length,
         players: players.map((p) => ({
           name: p.name,
-          positions: p.positions,
+          positions: positionLabels(p.positions),
           age: p.age,
           ovr: p.ovr,
           potential: p.potential,
@@ -183,7 +185,7 @@ export function registerScoutingTools(server: McpServer, ctx: McpContext) {
         verdict: r.verdict,
         player: {
           name: r.player.name,
-          position: r.player.position,
+          position: positionLabels(r.player.position.split('/')),
           ovr: r.player.ovr,
           potential: r.player.potential,
           age: r.player.age,
@@ -205,7 +207,7 @@ export function registerScoutingTools(server: McpServer, ctx: McpContext) {
         },
         alternatives: r.alternatives.map((a) => ({
           name: a.name,
-          position: a.position,
+          position: positionLabels(a.position.split('/')),
           ovr: a.ovr,
           potential: a.potential,
           age: a.age,

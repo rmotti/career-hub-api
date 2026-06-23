@@ -1,4 +1,5 @@
 import { formatMarketValue, formatSalary, millions, thousands } from '../../shared/utils/currency.js'
+import { positionLabels } from '../../shared/utils/positions.js'
 
 /** Shared "no save" reply so every tool degrades the same way. */
 export const noSaveResult = {
@@ -42,7 +43,7 @@ export interface ScoredPlayerLike {
  */
 export function scoredPlayerLine(p: ScoredPlayerLike): string {
   const parts = [
-    `• ${p.name} (${p.positions.join('/')})`,
+    `• ${p.name} (${positionLabels(p.positions)})`,
     `${p.age}y`,
     `OVR ${p.ovr}${p.potential != null ? `/POT ${p.potential}` : ''}`,
     formatMarketValue(millions(p.marketValue)),

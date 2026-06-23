@@ -1,9 +1,11 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import type { Position } from '@prisma/client'
 import { z } from 'zod'
+import { FORMATION_NAMES } from '../../features/scouting/formations.js'
 import { identifyGaps } from '../../features/scouting/scouting.service.js'
 import { prisma } from '../../shared/lib/prisma.js'
 import { formatMarketValue, formatSalary, millions, thousands } from '../../shared/utils/currency.js'
+import { positionLabel } from '../../shared/utils/positions.js'
 import type { McpContext } from '../context.js'
 import { resolveSaveId } from '../utils.js'
 import { noSaveResult, textResult } from './helpers.js'
@@ -112,7 +114,7 @@ export function registerSquadTools(server: McpServer, ctx: McpContext) {
         out.push(`${sector.label} (${inSector.length}) — avg OVR ${avgOvr?.toFixed(0) ?? '—'}, avg age ${avgAge?.toFixed(1) ?? '—'}`)
         for (const p of inSector) {
           out.push(
-            `  • #${p.shirtNumber ?? '—'} ${p.name} (${p.position}) — ${p.age}y · OVR ${p.ovr}${p.potential != null ? `/POT ${p.potential}` : ''} · ${p.status} · ${formatSalary(thousands(p.salary))}/wk · ${formatMarketValue(millions(p.marketValue))}`,
+            `  • #${p.shirtNumber ?? '—'} ${p.name} (${positionLabel(p.position)}) — ${p.age}y · OVR ${p.ovr}${p.potential != null ? `/POT ${p.potential}` : ''} · ${p.status} · ${formatSalary(thousands(p.salary))}/wk · ${formatMarketValue(millions(p.marketValue))}`,
           )
         }
         out.push('')
@@ -128,7 +130,10 @@ export function registerSquadTools(server: McpServer, ctx: McpContext) {
       description:
         'PRIMARY tool for "what does my squad need". One call returns a needs analysis for the active club: per-sector depth and average OVR/age/potential, the formation gaps (count vs ideal, aging, weak), and the active playbook objective with a strategic lens. Use this before recommend_signings so the recommendation targets a real need. Cross-reference its output with get_club_archetype and recommend_signings.',
       inputSchema: {
-        formation: z.enum(['4-3-3', '4-2-3-1']).optional().describe('Formation to evaluate depth against. Default 4-3-3.'),
+        formation: z
+          .enum(FORMATION_NAMES)
+          .optional()
+          .describe('Formation to evaluate depth against. Default 4-3-3. Three/five-at-the-back shapes (e.g. 3-4-2-1) have no full-backs and model wing-backs as LM/RM.'),
         saveId: z.string().optional(),
       },
     },
@@ -175,7 +180,7 @@ export function registerSquadTools(server: McpServer, ctx: McpContext) {
           `${sector.label} (${inSector.length}) — avg OVR ${avgOvr?.toFixed(0) ?? '—'}, avg age ${avgAge?.toFixed(1) ?? '—'}, best OVR ${bestOvr ?? '—'}${tags.length ? ` · ${tags.join(', ')}` : ' · ok'}`,
         )
         for (const g of sectorGaps) {
-          out.push(`    gap: [${g.severity}] ${g.position} ${g.count}/${g.ideal} — ${g.reason}`)
+          out.push(`    gap: [${g.severity}] ${positionLabel(g.position)} ${g.count}/${g.ideal} — ${g.reason}`)
         }
       }
 

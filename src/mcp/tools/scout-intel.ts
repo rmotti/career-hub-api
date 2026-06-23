@@ -8,6 +8,7 @@ import {
 import { getClubArchetype, identifyGaps } from '../../features/scouting/scouting.service.js'
 import { prisma } from '../../shared/lib/prisma.js'
 import { formatBalance, formatSalary, millions, thousands } from '../../shared/utils/currency.js'
+import { positionLabel, positionLabels } from '../../shared/utils/positions.js'
 import type { McpContext } from '../context.js'
 import { resolveSaveId } from '../utils.js'
 import { noSaveResult, scoredPlayerLine, textResult, type ScoredPlayerLike } from './helpers.js'
@@ -132,7 +133,7 @@ export function registerScoutIntelTools(server: McpServer, ctx: McpContext) {
         const pick = players.find((p) => !used.has(p.sofifaId))
 
         if (!pick) {
-          lines.push(`• ${gap.position} [${gap.severity}] — no affordable target found (${gap.reason})`)
+          lines.push(`• ${positionLabel(gap.position)} [${gap.severity}] — no affordable target found (${gap.reason})`)
           continue
         }
 
@@ -141,7 +142,7 @@ export function registerScoutIntelTools(server: McpServer, ctx: McpContext) {
         if (remaining != null && mv != null) remaining = Math.round((remaining - mv) * 10) / 10
 
         lines.push(
-          `• ${gap.position} [${gap.severity}] → ${pick.name} (${pick.positions.join('/')}) ${pick.age}y · OVR ${pick.ovr}/POT ${pick.potential} · ${formatBalance(millions(mv))} · ScoutScore ${pick.scoutScore ?? '—'} · Fit ${pick.fitScore ?? '—'} · sofifaId ${pick.sofifaId}`,
+          `• ${positionLabel(gap.position)} [${gap.severity}] → ${pick.name} (${positionLabels(pick.positions)}) ${pick.age}y · OVR ${pick.ovr}/POT ${pick.potential} · ${formatBalance(millions(mv))} · ScoutScore ${pick.scoutScore ?? '—'} · Fit ${pick.fitScore ?? '—'} · sofifaId ${pick.sofifaId}`,
         )
       }
 
@@ -180,7 +181,7 @@ export function registerScoutIntelTools(server: McpServer, ctx: McpContext) {
       )
 
       if (!r.available) {
-        return textResult(`No historical archetype available for ${opts.position}: ${r.reason}`)
+        return textResult(`No historical archetype available for ${positionLabel(opts.position)}: ${r.reason}`)
       }
 
       const age = r.archetype.age

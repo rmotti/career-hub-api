@@ -1,6 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 import { prisma } from '../../shared/lib/prisma.js'
+import { positionLabel } from '../../shared/utils/positions.js'
 import type { McpContext } from '../context.js'
 import { resolveSaveId } from '../utils.js'
 import { jsonResult, textResult } from './helpers.js'
@@ -76,14 +77,14 @@ export function registerPerformanceTools(server: McpServer, ctx: McpContext) {
         })),
         topScorers: topScorers.map((s) => ({
           name: s.player.name,
-          position: s.player.position,
+          position: positionLabel(s.player.position),
           matches: s.matches,
           goals: s.goals,
           assists: s.assists,
         })),
         topAssisters: topAssisters.map((a) => ({
           name: a.player.name,
-          position: a.player.position,
+          position: positionLabel(a.player.position),
           matches: a.matches,
           assists: a.assists,
           goals: a.goals,
