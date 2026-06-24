@@ -1,21 +1,25 @@
 import { prisma } from '../../shared/lib/prisma.js'
 import { cacheGet, cacheSet } from '../../shared/utils/cache.js'
 import { formatBalance, formatSalary, millions, thousands } from '../../shared/utils/currency.js'
-import { identifyGaps } from '../scouting/scouting.service.js'
 
 const TTL = 300
 
 /**
- * Builds the dense save briefing (club, season, finances, top 5, gaps, current-season results)
- * as a JSON string, cached in Redis. Shared by the MCP `save://{saveId}/dossier` resource and
- * the chat first-turn auto-context. Returns null when the save doesn't exist or isn't owned by
- * the user (caller decides whether that's an error or a no-op). Validates ownership via `userId`.
+ * Builds the dense save briefing (club, season, finances, top 5, current-season results) as a
+ * JSON string, cached in Redis. Shared by the MCP `save://{saveId}/dossier` resource and the
+ * chat first-turn auto-context. Returns null when the save doesn't exist or isn't owned by the
+ * user (caller decides whether that's an error or a no-op). Validates ownership via `userId`.
  *
- * v2: JSON payload (was markdown). Bumping the key avoids serving a stale pre-deploy entry for
- * up to TTL after the format switch.
+ * Deliberately carries NO formation gaps: the save has no stored formation, so any gap read here
+ * would assume a shape (4-3-3) the user never confirmed — and the opening message would then
+ * always parrot that shape's gaps (e.g. a phantom left-back hole for a back-three side). Gaps are
+ * computed on demand by the scouting tools once the user states their formation.
+ *
+ * v3: dropped the gaps block (was v2). Bumping the key avoids serving a stale pre-deploy entry
+ * for up to TTL after the format switch.
  */
 export async function getSaveDossierJson(userId: string, saveId: string): Promise<string | null> {
-  const cacheKey = `mcp:resource:dossier:v2:${userId}:${saveId}`
+  const cacheKey = `mcp:resource:dossier:v3:${userId}:${saveId}`
   const cached = await cacheGet<string>(cacheKey)
   if (cached) return cached
 
@@ -27,7 +31,7 @@ export async function getSaveDossierJson(userId: string, saveId: string): Promis
 
   const stint = save.clubStints[0]
 
-  const [topPlayers, wageAgg, lastTeamStats, gaps] = await Promise.all([
+  const [topPlayers, wageAgg, lastTeamStats] = await Promise.all([
     stint
       ? prisma.player.findMany({
           where: { saveId: save.id, activeClubStintId: stint.id },
@@ -48,9 +52,6 @@ export async function getSaveDossierJson(userId: string, saveId: string): Promis
           where: { clubStintId: stint.id, season: save.currentSeason },
           include: { competition: { select: { name: true, type: true } } },
         })
-      : Promise.resolve([]),
-    stint
-      ? identifyGaps(userId, save.id, { formation: '4-3-3' }).catch(() => [])
       : Promise.resolve([]),
   ])
 
@@ -73,10 +74,6 @@ export async function getSaveDossierJson(userId: string, saveId: string): Promis
       potential: p.potential,
       status: p.status,
     })),
-    gaps: {
-      formation: '4-3-3',
-      items: gaps.map((g) => ({ position: g.position, severity: g.severity, reason: g.reason })),
-    },
     currentSeason: {
       competitions: lastTeamStats.map((t) => ({
         competition: t.competition?.name ?? 'Overall',

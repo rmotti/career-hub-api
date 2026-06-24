@@ -86,7 +86,7 @@ export function createResponseStream(options: SendMessageOptions) {
   return openai.responses.create(params)
 }
 
-const OPENING_DIRECTIVE = `Open the conversation as Junior in ONE short paragraph (2–3 lines): greet the manager and surface the single most pressing thing about the save from the briefing below (a critical gap, a finance constraint, or a standout). Lead — do not ask what they want. End with one concrete suggestion. Use only the briefing; do not call tools, do not invent data.`
+const OPENING_DIRECTIVE = `Open the conversation as Junior in ONE short paragraph (2 lines): briefly introduce yourself as the manager's assistant for this save (you can name the club and season from the briefing), then ask how you can help. Do NOT analyse the squad, do NOT name a positional gap or weakness, and do NOT assume a formation — the save does not record one, so any "you need a left-back / centre-back" read here would be a guess. Do not call tools, do not invent data. Keep it warm and short.`
 
 /**
  * Generates Junior's proactive opening message from the save dossier (no tools — the briefing is
