@@ -3,6 +3,7 @@ import { z } from 'zod'
 import {
   evaluateSigningFit,
   identifyGaps,
+  scoutHiddenGems,
   searchTransferTargets,
 } from '../../features/scouting/scouting.service.js'
 import { prisma } from '../../shared/lib/prisma.js'
@@ -164,6 +165,46 @@ export function registerScoutingTools(server: McpServer, ctx: McpContext) {
           marketValue: formatBalance(millions(p.marketValue)),
           club: p.club,
           fitScore: p.fitScore ?? null,
+          sofifaId: p.sofifaId,
+        })),
+      })
+    },
+  )
+
+  server.registerTool(
+    'scout_hidden_gems',
+    {
+      description:
+        'Raw "garimpo" for overlooked players OUTSIDE the five elite first divisions (Premier League, LaLiga EA Sports, Bundesliga, Ligue 1, Serie A) and women\'s leagues — second tiers like the Championship, 2. Bundesliga and Serie BKT ARE included. Use when the user asks for hidden gems, undervalued/under-the-radar players, bargains, or scouting away from the big leagues. NOT scoutScore/playbook-aware — a pure dataset dig. Two modes: "upside" (young, ranked by potential minus current overall) and "value" (a ready bargain, ranked by overall per €M). Returns up to 20 players with their league and nation so the user sees where the find comes from.',
+      inputSchema: {
+        mode: z
+          .enum(['upside', 'value'])
+          .optional()
+          .describe('"upside" = young high-ceiling (default); "value" = ready bargain by overall per €M.'),
+        position: POSITION.optional().describe('FC26 position code to narrow the search (optional).'),
+        maxAge: z.number().int().optional().describe('Age ceiling. Defaults to 23 in upside mode; no default in value mode.'),
+        maxValue: z.number().optional().describe('Max market value in millions of €.'),
+        minPotential: z.number().int().optional().describe('Minimum potential rating.'),
+      },
+    },
+    async ({ mode, position, maxAge, maxValue, minPotential }) => {
+      const gems = await scoutHiddenGems({ mode, position, maxAge, maxValue, minPotential })
+
+      return jsonResult({
+        mode: mode ?? 'upside',
+        excludedLeagues: 'top-5 first divisions + women\'s leagues',
+        returned: gems.length,
+        players: gems.map((p) => ({
+          name: p.name,
+          positions: positionLabels(p.position.split('/')),
+          age: p.age,
+          ovr: p.ovr,
+          potential: p.potential,
+          potentialGap: p.potentialGap,
+          marketValue: formatBalance(millions(p.marketValue)),
+          club: p.club,
+          league: p.league,
+          nation: p.nation,
           sofifaId: p.sofifaId,
         })),
       })

@@ -14,7 +14,7 @@ vi.mock('../../fc26-players/fc26-players.service.js', () => ({
 
 import { prisma } from '../../../shared/lib/prisma.js'
 import { listFc26Players } from '../../fc26-players/fc26-players.service.js'
-import { evaluateSigningFit, identifyGaps, searchTransferTargets } from '../scouting.service.js'
+import { evaluateSigningFit, identifyGaps, scoutHiddenGems, searchTransferTargets } from '../scouting.service.js'
 
 const mockedPrisma = prisma as unknown as {
   save: { findFirst: ReturnType<typeof vi.fn> }
@@ -317,5 +317,73 @@ describe('evaluateSigningFit', () => {
 
     const where = mockedPrisma.fc26Player.findMany.mock.calls[0][0].where
     expect(where.marketValue).toEqual({ not: null, lte: 40 })
+  })
+})
+
+describe('scoutHiddenGems', () => {
+  // Minimal dataset row factory — only the fields the function selects/uses.
+  const row = (over: Partial<Record<string, unknown>> = {}) => ({
+    sofifaId: 1, name: 'P', positions: ['ATA'], age: 21, ovr: 75,
+    potential: 80, marketValue: 5, club: 'C', league: 'Liga Portugal', nation: 'Portugal',
+    ...over,
+  })
+
+  it('excludes the top-5 first divisions and women leagues from the query', async () => {
+    mockedPrisma.fc26Player.findMany.mockResolvedValue([])
+
+    await scoutHiddenGems({ mode: 'upside' })
+
+    const where = mockedPrisma.fc26Player.findMany.mock.calls[0][0].where
+    expect(where.league.notIn).toEqual(
+      expect.arrayContaining([
+        'Premier League', 'LaLiga EA Sports', 'Bundesliga', 'Ligue 1', 'Serie A',
+        'Liga F', 'Frauen-Bundesliga', 'Arkema D1',
+      ]),
+    )
+    // Second tiers must NOT be excluded — the whole point of the tool.
+    expect(where.league.notIn).not.toContain('EFL Championship')
+    expect(where.league.notIn).not.toContain('2. Bundesliga')
+    expect(where.league.notIn).not.toContain('Serie BKT')
+  })
+
+  it('upside mode caps age (default 23) and ranks by potential gap', async () => {
+    mockedPrisma.fc26Player.findMany.mockResolvedValue([
+      row({ sofifaId: 1, ovr: 78, potential: 82 }), // gap 4
+      row({ sofifaId: 2, ovr: 70, potential: 85 }), // gap 15
+      row({ sofifaId: 3, ovr: 74, potential: 80 }), // gap 6
+    ])
+
+    const gems = await scoutHiddenGems({ mode: 'upside' })
+
+    const where = mockedPrisma.fc26Player.findMany.mock.calls[0][0].where
+    expect(where.age).toEqual({ lte: 23 })
+    expect(gems.map((g) => g.sofifaId)).toEqual([2, 3, 1]) // by potentialGap desc
+    expect(gems[0].potentialGap).toBe(15)
+  })
+
+  it('value mode applies an OVR floor and ranks by overall per market value', async () => {
+    mockedPrisma.fc26Player.findMany.mockResolvedValue([
+      row({ sofifaId: 1, ovr: 80, marketValue: 20 }), // 4.0 per €M
+      row({ sofifaId: 2, ovr: 78, marketValue: 6 }),  // 13.0 per €M
+      row({ sofifaId: 3, ovr: 82, marketValue: 41 }), // 2.0 per €M
+    ])
+
+    const gems = await scoutHiddenGems({ mode: 'value' })
+
+    const where = mockedPrisma.fc26Player.findMany.mock.calls[0][0].where
+    expect(where.ovr).toEqual({ gte: 70 })
+    expect(where.marketValue).toMatchObject({ not: null, gt: 0 })
+    expect(gems.map((g) => g.sofifaId)).toEqual([2, 1, 3]) // ovr/value desc
+  })
+
+  it('passes through position and value caps as filters', async () => {
+    mockedPrisma.fc26Player.findMany.mockResolvedValue([])
+
+    await scoutHiddenGems({ mode: 'upside', position: 'LE', maxValue: 15, minPotential: 80 })
+
+    const where = mockedPrisma.fc26Player.findMany.mock.calls[0][0].where
+    expect(where.positions).toEqual({ has: 'LE' })
+    expect(where.marketValue).toMatchObject({ lte: 15 })
+    expect(where.potential).toEqual({ gte: 80 })
   })
 })

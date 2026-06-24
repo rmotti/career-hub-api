@@ -21,7 +21,7 @@ No **primeiro turno** de uma conversa fixada numa save, o chat anexa automaticam
 dossiê (`getSaveDossierJson`) ao input — o modelo já começa aterrado, sem depender de chamar uma
 tool. Nos turnos seguintes o dossiê não é reenviado (já vive na cadeia via `previousResponseId`).
 
-## Tools (25)
+## Tools (26)
 
 **Contexto & estado**
 | Nome | Input | Descrição |
@@ -36,7 +36,7 @@ tool. Nos turnos seguintes o dossiê não é reenviado (já vive na cadeia via `
 |---|---|---|
 | `analyze_squad_needs` | `formation?`, `saveId?` | **Primária p/ "do que preciso".** Profundidade por setor + gaps + objetivo do playbook + lente estratégica, numa chamada |
 | `analyze_squad_by_position` | `saveId?` | Elenco completo (GK/DEF/MID/ATT) com OVR/potencial, status, salário, valor + sumário por setor |
-| `identify_squad_gaps` | `saveId?`, `formation?` | Lacunas vs 4-3-3 ou 4-2-3-1 (nível baixo; `analyze_squad_needs` já inclui) |
+| `identify_squad_gaps` | `saveId?`, `formation?` | Lacunas vs a formação dada (qualquer separador; default 4-3-3; nível baixo; `analyze_squad_needs` já inclui) |
 
 **Scouting de mercado**
 | Nome | Input | Descrição |
@@ -46,6 +46,7 @@ tool. Nos turnos seguintes o dossiê não é reenviado (já vive na cadeia via `
 | `plan_transfer_window` | `formation?`, `maxTargets?`, `saveId?` | Plano de janela: necessidades por severidade → melhor alvo acessível por scoutScore, descontando do orçamento |
 | `get_club_archetype` | `position`, `objective?`, `includeRecentSignings?`, `saveId?` | **Club DNA**: idade/nacionalidades/ligas típicas + contratações recentes |
 | `search_transfer_targets` | `position`, `maxAge?`, `minOverall?`, `maxValue?`, `saveId?` | Lista filtrada por OVR cru (sem scoutScore) |
+| `scout_hidden_gems` | `mode?`, `position?`, `maxAge?`, `maxValue?`, `minPotential?` | **Garimpo** fora das 5 primeiras divisões de elite (+ ligas femininas); modos `upside` (potencial − OVR) e `value` (OVR por €M). Sem scoutScore |
 | `evaluate_signing_fit` | `sofifaId`, `saveId?` | Avaliação de uma contratação (custo, encaixe, veredito, alternativas) |
 | `compare_players` | `sofifaIds?`, `names?`, `saveId?` | Compara 2–4 jogadores lado a lado (OVR/pot/idade/valor + scoutScore/fitScore) |
 | `list_scout_playbooks` | `saveId?` | Playbooks do save (pesos + preferências) + qual está ativo |

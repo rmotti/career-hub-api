@@ -38,6 +38,29 @@ const STARTER_BELOW_SQUAD_THRESHOLD = 6
 /** A second-choice this many OVR below the starter reads as a thin/weak bench at that position. */
 const BENCH_DROPOFF_THRESHOLD = 6
 
+/**
+ * The five elite FIRST divisions, by their exact FC26 dataset `league` names. Hidden-gem scouting
+ * excludes these so the search lands on the leagues where undervalued players hide — note the
+ * SECOND tiers (Championship, 2. Bundesliga, Serie BKT, Ligue 2, LaLiga Hypermotion) are NOT
+ * excluded, which is the whole point. Deploy-time constant, identical in every replica.
+ */
+const TOP5_FIRST_DIVISIONS = [
+  'Premier League',
+  'LaLiga EA Sports',
+  'Bundesliga',
+  'Ligue 1',
+  'Serie A',
+] as const
+
+/** Women's leagues — always excluded from gem scouting (the saves are men's career). */
+const WOMENS_LEAGUES = ['Liga F', 'Frauen-Bundesliga', 'Arkema D1'] as const
+
+/** Below this OVR a high ovr/value ratio just surfaces cheap low-quality players, not bargains. */
+const VALUE_MODE_MIN_OVR = 70
+/** Default age ceiling for the upside mode — "young" with room to grow. */
+const UPSIDE_MODE_MAX_AGE = 23
+const HIDDEN_GEMS_LIMIT = 20
+
 async function getActiveStint(userId: string, saveId: string) {
   const save = await prisma.save.findFirst({
     where: { id: saveId, userId },
@@ -159,6 +182,101 @@ export async function searchTransferTargets(_userId: string, opts: TransferTarge
     saveId: opts.saveId,
   })
   return result
+}
+
+export type HiddenGemMode = 'upside' | 'value'
+
+export type HiddenGemsOpts = {
+  mode?: HiddenGemMode
+  position?: string
+  maxAge?: number
+  maxValue?: number
+  minPotential?: number
+}
+
+export type HiddenGem = {
+  sofifaId: number
+  name: string
+  position: string
+  age: number
+  ovr: number
+  potential: number
+  potentialGap: number
+  marketValue: number | null
+  club: string | null
+  league: string | null
+  nation: string | null
+}
+
+/**
+ * Raw "garimpo" — undervalued/overlooked dataset players OUTSIDE the five elite first divisions
+ * (and women's leagues). Deliberately NOT scoutScore/playbook-aware: it's a pure dataset dig the
+ * user can run regardless of strategy. Two modes:
+ *   - 'upside': young (age <= maxAge, default 23), ranked by potential − ovr (room to grow).
+ *   - 'value' : a ready bargain, ranked by ovr/marketValue (quality per €), with a sane OVR floor
+ *               so it doesn't degrade into a pile of cheap weak players.
+ */
+export async function scoutHiddenGems(opts: HiddenGemsOpts = {}): Promise<HiddenGem[]> {
+  const mode: HiddenGemMode = opts.mode ?? 'upside'
+
+  const where: Prisma.Fc26PlayerWhereInput = {
+    league: { notIn: [...TOP5_FIRST_DIVISIONS, ...WOMENS_LEAGUES] },
+  }
+  if (opts.position) where.positions = { has: opts.position }
+  if (opts.minPotential != null) where.potential = { gte: opts.minPotential }
+
+  const marketValue: Prisma.FloatNullableFilter = {}
+  if (opts.maxValue != null) marketValue.lte = opts.maxValue
+
+  if (mode === 'upside') {
+    where.age = { lte: opts.maxAge ?? UPSIDE_MODE_MAX_AGE }
+  } else {
+    // value: need a real, positive market value to rank by quality-per-euro, plus an OVR floor.
+    marketValue.not = null
+    marketValue.gt = 0
+    where.ovr = { gte: VALUE_MODE_MIN_OVR }
+    if (opts.maxAge != null) where.age = { lte: opts.maxAge }
+  }
+  if (Object.keys(marketValue).length > 0) where.marketValue = marketValue
+
+  // Over-fetch then rank in JS: both rankings (potential−ovr, ovr/value) aren't expressible as a
+  // single Prisma orderBy. Bounded by the league/age/value filters so the set stays small.
+  const rows = await prisma.fc26Player.findMany({
+    where,
+    orderBy: mode === 'upside' ? [{ potential: 'desc' }] : [{ ovr: 'desc' }],
+    take: 200,
+    select: {
+      sofifaId: true, name: true, positions: true, age: true, ovr: true,
+      potential: true, marketValue: true, club: true, league: true, nation: true,
+    },
+  })
+
+  const ranked = rows
+    .map((p) => ({ ...p, potentialGap: p.potential - p.ovr }))
+    .sort((a, b) => {
+      if (mode === 'upside') {
+        return b.potentialGap - a.potentialGap || b.potential - a.potential
+      }
+      // value: ovr per €M, both guaranteed > 0 by the where clause
+      const ra = a.ovr / (a.marketValue as number)
+      const rb = b.ovr / (b.marketValue as number)
+      return rb - ra || b.ovr - a.ovr
+    })
+    .slice(0, HIDDEN_GEMS_LIMIT)
+
+  return ranked.map((p) => ({
+    sofifaId: p.sofifaId,
+    name: p.name,
+    position: p.positions.join('/'),
+    age: p.age,
+    ovr: p.ovr,
+    potential: p.potential,
+    potentialGap: p.potentialGap,
+    marketValue: p.marketValue,
+    club: p.club,
+    league: p.league,
+    nation: p.nation,
+  }))
 }
 
 export type SigningEvaluation = {
