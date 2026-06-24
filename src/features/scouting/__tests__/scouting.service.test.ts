@@ -101,7 +101,7 @@ describe('identifyGaps', () => {
     const ataGap = gaps.find((g) => g.position === 'ATA')
     expect(ataGap).toBeDefined()
     expect(ataGap?.starterOvr).toBe(78) // top OVR, not the 77 average
-    expect(ataGap?.reason).toMatch(/abaixo do melhor do elenco/)
+    expect(ataGap?.reason).toMatch(/below the squad's best/)
   })
 
   it('flags a bench drop-off when the backup is far below the starter', async () => {
@@ -119,7 +119,7 @@ describe('identifyGaps', () => {
     expect(ataGap).toBeDefined()
     expect(ataGap?.starterOvr).toBe(85)
     expect(ataGap?.benchOvr).toBe(72)
-    expect(ataGap?.reason).toMatch(/Banco fraco/)
+    expect(ataGap?.reason).toMatch(/Weak bench/)
   })
 
   it('does not flag a position with a squad-level starter and adequate backup', async () => {

@@ -8,6 +8,7 @@ import { findLeagueByClub } from '../clubs/clubs.service.js'
 import { cacheGet, cacheSet } from '../../shared/utils/cache.js'
 import { assertSaveAccess } from '../../shared/utils/save-access.js'
 import { getFormation } from './formations.js'
+import { positionLabel } from '../../shared/utils/positions.js'
 
 export type GapSeverity = 'critical' | 'moderate' | 'low'
 
@@ -98,6 +99,7 @@ export async function identifyGaps(
 
     let severity: GapSeverity
     let reason: string
+    const label = positionLabel(pos)
 
     const starterBelowSquad =
       starterOvr !== null && squadBestOvr !== null && squadBestOvr - starterOvr >= STARTER_BELOW_SQUAD_THRESHOLD
@@ -105,25 +107,25 @@ export async function identifyGaps(
 
     if (count < req.min) {
       severity = 'critical'
-      reason = `Só ${count} opção(ões) na posição ${pos}, mínimo é ${req.min}.`
+      reason = `Only ${count} option(s) at ${label}, minimum is ${req.min}.`
     } else if (count < req.ideal) {
       severity = 'moderate'
-      reason = `${count} opção(ões) na posição ${pos}, ideal é ${req.ideal}.`
+      reason = `${count} option(s) at ${label}, ideal is ${req.ideal}.`
     } else if (starterBelowSquad) {
-      // Titular abaixo do nível do elenco: o melhor jogador da posição fica muito atrás do
-      // melhor do time. Vale reforçar para subir o teto da posição.
+      // Starter below the squad's level: the position's best player sits well behind the squad's
+      // best. Worth reinforcing to raise the position's ceiling.
       severity = 'moderate'
-      reason = `Titular em ${pos} (OVR ${starterOvr}) está ${squadBestOvr! - starterOvr!} abaixo do melhor do elenco (${squadBestOvr}).`
+      reason = `Starter at ${label} (OVR ${starterOvr}) is ${squadBestOvr! - starterOvr!} below the squad's best (${squadBestOvr}).`
     } else if (starterAge !== null && starterAge >= 31) {
       severity = 'moderate'
-      reason = `Titular em ${pos} tem ${starterAge} anos — candidato a renovação.`
+      reason = `Starter at ${label} is ${starterAge} years old — renewal candidate.`
     } else if (benchDropoff) {
-      // Banco fraco: o reserva imediato cai muito abaixo do titular. Exposto a lesão/rodízio.
+      // Weak bench: the immediate backup drops well below the starter. Exposed to injury/rotation.
       severity = 'low'
-      reason = `Banco fraco em ${pos}: reserva (OVR ${benchOvr}) está ${starterOvr! - benchOvr!} abaixo do titular (${starterOvr}).`
+      reason = `Weak bench at ${label}: backup (OVR ${benchOvr}) is ${starterOvr! - benchOvr!} below the starter (${starterOvr}).`
     } else if (starterOvr !== null && starterOvr < 75) {
       severity = 'low'
-      reason = `Titular em ${pos} tem só ${starterOvr} de overall.`
+      reason = `Starter at ${label} has only ${starterOvr} overall.`
     } else {
       // Adequately staffed and good quality. If it's only covered by a non-specialist, the tool
       // will note that, but it's not a need — don't emit a gap.
