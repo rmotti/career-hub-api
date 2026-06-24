@@ -40,6 +40,7 @@ const POSITION_GROUP: Record<string, string> = {
 }
 
 export interface Fc26PlayerFilters {
+  name?: string
   positions?: string[]
   primaryPositions?: string[]
   secondaryPositions?: string[]
@@ -192,6 +193,7 @@ export async function listFc26Players(filters: Fc26PlayerFilters) {
     baseResult = cached
   } else {
     const {
+      name,
       positions, primaryPositions, secondaryPositions,
       nations, clubs, leagues,
       minOvr, maxOvr, minAge, maxAge,
@@ -205,6 +207,16 @@ export async function listFc26Players(filters: Fc26PlayerFilters) {
     } = fc26Filters
 
     const where: any = {}
+
+    // Busca por nome (typeahead): só dispara a partir de 3 letras — abaixo disso o termo
+    // é ignorado, devolvendo o catálogo normal ordenado por OVR. Casa em name e longName.
+    const nameTerm = name?.trim()
+    if (nameTerm && nameTerm.length >= 3) {
+      where.OR = [
+        { name:     { contains: nameTerm, mode: 'insensitive' } },
+        { longName: { contains: nameTerm, mode: 'insensitive' } },
+      ]
+    }
 
     if (positions?.length)    where.positions     = { hasSome: positions }
     if (nations?.length)      where.nation        = { in: nations }

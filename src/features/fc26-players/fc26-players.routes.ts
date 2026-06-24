@@ -136,6 +136,7 @@ export async function fc26PlayersRoutes(app: FastifyInstance) {
       querystring: {
         type: 'object',
         properties: {
+          name:               { type: 'string', description: 'Busca por nome (typeahead). Só aplica a partir de 3 caracteres; abaixo disso é ignorado. Case-insensitive, casa em name e longName.', example: 'vini' },
           positions:          { type: 'string', description: 'Posições separadas por vírgula (qualquer posição do array)', example: 'MC,ATA' },
           primaryPositions:   { type: 'string', description: 'Filtro por posição principal (positions[0]), separadas por vírgula', example: 'ATA,ZAG' },
           secondaryPositions: { type: 'string', description: 'Filtro por posição secundária (positions[1..]), separadas por vírgula', example: 'PD,PE' },

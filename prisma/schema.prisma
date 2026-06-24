@@ -1,11 +1,13 @@
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  directUrl  = env("DIRECT_URL")
+  extensions = [pg_trgm]
 }
 
 model User {
@@ -424,6 +426,10 @@ model Fc26Player {
   goalkeepingPositioning Int?
   goalkeepingReflexes    Int?
   goalkeepingSpeed       Int?
+
+  // Typeahead da aba Search: busca por substring (ILIKE) em name/longName, indexada via trigram.
+  @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "Fc26Player_name_trgm_idx")
+  @@index([longName(ops: raw("gin_trgm_ops"))], type: Gin, map: "Fc26Player_longName_trgm_idx")
 
   shortlistItems ShortlistItem[]
 

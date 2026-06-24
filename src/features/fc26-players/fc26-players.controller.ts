@@ -3,6 +3,7 @@ import { listFc26Players, getFc26PlayerById, getFc26Filters, getFitBreakdown } f
 import { NotFoundError } from '../../shared/utils/errors.js'
 
 interface ListQuerystring {
+  name?: string
   positions?: string
   primaryPositions?: string
   secondaryPositions?: string
