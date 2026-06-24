@@ -1,5 +1,7 @@
 import { FastifyReply, FastifyRequest } from 'fastify'
 import { evaluateSigningFit, getClubArchetype, identifyGaps, searchTransferTargets } from './scouting.service.js'
+import { FORMATION_NAMES, normalizeFormation } from './formations.js'
+import { AppError } from '../../shared/utils/errors.js'
 
 interface SaveParams { saveId: string }
 interface EvaluateParams { saveId: string; sofifaId: string }
@@ -17,9 +19,13 @@ export async function identifyGapsHandler(
   request: FastifyRequest<{ Params: SaveParams; Querystring: GapsQuery }>,
   reply: FastifyReply,
 ) {
-  const gaps = await identifyGaps(request.user!.id, request.params.saveId, {
-    formation: request.query.formation,
-  })
+  const rawFormation = request.query.formation
+  const formation = normalizeFormation(rawFormation)
+  if (rawFormation && !formation) {
+    throw new AppError(`Unsupported formation "${rawFormation}". Supported: ${FORMATION_NAMES.join(', ')}.`, 400)
+  }
+
+  const gaps = await identifyGaps(request.user!.id, request.params.saveId, { formation })
   return reply.send({ gaps })
 }
 

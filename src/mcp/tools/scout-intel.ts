@@ -6,6 +6,7 @@ import {
   scorePlayersBySofifaId,
 } from '../../features/scout-playbooks/scout-playbooks.service.js'
 import { getClubArchetype, identifyGaps } from '../../features/scouting/scouting.service.js'
+import { FORMATION_NAMES, normalizeFormation } from '../../features/scouting/formations.js'
 import { prisma } from '../../shared/lib/prisma.js'
 import { formatBalance, formatSalary, millions, thousands } from '../../shared/utils/currency.js'
 import { positionLabel, positionLabels } from '../../shared/utils/positions.js'
@@ -91,12 +92,20 @@ export function registerScoutIntelTools(server: McpServer, ctx: McpContext) {
       description:
         'Builds a coherent transfer-window plan in ONE call: takes the squad needs (by severity), and for each pressing need picks the best AFFORDABLE target by scoutScore, tracking the running cost against the transfer budget (greedy — each pick reduces the remaining budget for the next). Use for "plan my window", "what should I do this window", "build me a shopping list". Returns a need→target plan with the budget left over.',
       inputSchema: {
-        formation: z.enum(['4-3-3', '4-2-3-1']).optional().describe('Formation to evaluate needs against. Default 4-3-3.'),
+        formation: z
+          .string()
+          .optional()
+          .describe('Formation to evaluate needs against, any separator ("3-4-2-1", "3421", "352"). Default 4-3-3.'),
         maxTargets: z.number().int().optional().describe('How many needs to address (default 3, max 5).'),
         saveId: z.string().optional(),
       },
     },
-    async ({ formation, maxTargets, saveId }) => {
+    async ({ formation: rawFormation, maxTargets, saveId }) => {
+      const formation = normalizeFormation(rawFormation)
+      if (rawFormation && !formation) {
+        return textResult(`Unsupported formation "${rawFormation}". Supported: ${FORMATION_NAMES.join(', ')}.`)
+      }
+
       const id = await resolveSaveId(ctx.userId, saveId, ctx.saveId)
       if (!id) return noSaveResult
 

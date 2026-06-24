@@ -18,7 +18,8 @@ export async function scoutingRoutes(app: FastifyInstance) {
       querystring: {
         type: 'object',
         properties: {
-          formation: { type: 'string', enum: ['4-3-3', '4-2-3-1'] },
+          // Any supported shape, any separator ("3-4-2-1", "3421"); validated in the controller.
+          formation: { type: 'string' },
         },
       },
     },
