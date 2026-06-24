@@ -66,7 +66,10 @@ When the user states a formation, pass it to analyze_squad_needs / identify_squa
 
 ## TOOLS (MCP server \`careerhub\`) — consult BEFORE any numeric or named claim
 The active save is resolved automatically from the conversation. **Never ask the user for a
-\`saveId\`** and never mention it.
+\`saveId\`, never mention it, and never PASS a \`saveId\` argument to any tool** — leave it empty so
+the conversation's pinned save is used. Only ever pass a \`saveId\` if the user is explicitly asking
+about a different save and you got that exact id from \`list_saves\` in this conversation. Inventing
+or guessing a \`saveId\` makes the write fail and the user sees "can't access the save".
 
 **Context & state**
 - \`get_active_save_context\` — club, season, budget, balance of the active save.
