@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client'
 import { prisma } from '../../shared/lib/prisma.js'
 import { cacheGet, cacheSet } from '../../shared/utils/cache.js'
 import {
@@ -83,6 +84,23 @@ export type FitScorePlayerInput = Pick<
 
 function buildCacheKey(filters: Omit<Fc26PlayerFilters, 'saveId' | 'objective'>): string {
   return `fc26:list:${JSON.stringify(filters)}`
+}
+
+/**
+ * Resolve os sofifaIds cujo name/longName casam com o termo de busca, ignorando caixa
+ * E acento (unaccent dos dois lados, via pg_trgm/unaccent — ver migração trgm). Retorna
+ * só os IDs para que a query principal componha os demais filtros por cima (AND).
+ * O termo é parametrizado ($queryRaw): sem risco de injeção mesmo vindo do usuário.
+ */
+async function searchSofifaIdsByName(term: string): Promise<number[]> {
+  const pattern = `%${term}%`
+  const rows = await prisma.$queryRaw<{ sofifaId: number }[]>(Prisma.sql`
+    SELECT "sofifaId"
+    FROM "Fc26Player"
+    WHERE immutable_unaccent("name") ILIKE immutable_unaccent(${pattern})
+       OR immutable_unaccent(COALESCE("longName", '')) ILIKE immutable_unaccent(${pattern})
+  `)
+  return rows.map((r) => r.sofifaId)
 }
 
 /**
@@ -209,13 +227,15 @@ export async function listFc26Players(filters: Fc26PlayerFilters) {
     const where: any = {}
 
     // Busca por nome (typeahead): só dispara a partir de 3 letras — abaixo disso o termo
-    // é ignorado, devolvendo o catálogo normal ordenado por OVR. Casa em name e longName.
+    // é ignorado, devolvendo o catálogo normal ordenado por OVR. Casa em name e longName,
+    // case-insensitive E sem acento (unaccent dos dois lados: "vinicius" acha "Vinícius").
+    // O Prisma não expõe unaccent, então resolvemos os sofifaIds num passo separado e os
+    // injetamos no where para que os demais filtros componham por cima (AND) sem mudança.
     const nameTerm = name?.trim()
     if (nameTerm && nameTerm.length >= 3) {
-      where.OR = [
-        { name:     { contains: nameTerm, mode: 'insensitive' } },
-        { longName: { contains: nameTerm, mode: 'insensitive' } },
-      ]
+      const matched = await searchSofifaIdsByName(nameTerm)
+      // Sem match: força resultado vazio sem disparar a query principal à toa.
+      where.sofifaId = { in: matched }
     }
 
     if (positions?.length)    where.positions     = { hasSome: positions }
